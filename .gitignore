@@ -1,0 +1,12 @@
+node_modules/
+dist/
+release/
+.snapshots/
+packages/siyuan-plugin/dev/
+packages/siyuan-plugin/package.zip
+packages/obsidian-plugin/dev/
+.DS_Store
+*.log
+.claude/
+.env
+.vitest/

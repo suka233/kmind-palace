@@ -1,0 +1,33 @@
+/* 宫殿页签：去掉内容区的内边距，画布铺满 */
+.workspace-leaf-content[data-type="kmind-palace"] > .view-content.kmind-palace-leaf {
+  padding: 0;
+  overflow: hidden;
+  position: relative;
+}
+.kmind-palace-host {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.kmind-palace-error {
+  padding: 24px;
+  color: var(--text-error);
+}
+/* 悬停预览的锚点：放在指针位置，看不见 */
+.kmind-palace-anchor {
+  position: fixed;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  z-index: var(--layer-tooltip, 40);
+}
+/* 选块：标题加粗，类型小字 */
+.kmp-part { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.kmp-part > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kmp-part-h { font-weight: 600; }
+.kmp-part small { flex: none; color: var(--text-faint); }
+/* 桌面端右下角浮着 Obsidian 的状态栏：底部居中的工具条、回忆面板往上让一点 */
+body:not(.is-mobile) .kmind-palace-leaf .kp-root .kp-bar,
+body:not(.is-mobile) .kmind-palace-leaf .kp-root .kp-recall,
+body:not(.is-mobile) .kmind-palace-leaf .kp-root .kp-place,
+body:not(.is-mobile) .kmind-palace-leaf .kp-root .kp-walk-hud { bottom: 34px; }

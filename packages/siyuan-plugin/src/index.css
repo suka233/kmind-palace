@@ -1,0 +1,136 @@
+/* 页签 / 移动端对话框里的宿主容器 */
+.kmind-palace-host {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.kmind-palace-mobile {
+  position: relative;
+  height: calc(100vh - 60px);
+}
+.kmind-palace-error {
+  box-sizing: border-box;
+  padding: 24px;
+  color: var(--b3-theme-error);
+}
+
+/* 块选择器 */
+.kmp-picker {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 12px 16px 10px;
+  box-sizing: border-box;
+  gap: 8px;
+}
+.kmp-caption {
+  font-size: 12px;
+  color: var(--b3-theme-on-surface-light);
+}
+.kmp-caption:empty {
+  display: none;
+}
+.kmp-list {
+  flex: 1;
+  overflow: auto;
+  margin: 0 -6px;
+}
+.kmp-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 7px 8px;
+  border-radius: var(--b3-border-radius);
+  cursor: pointer;
+}
+.kmp-row:hover,
+.kmp-row.kmp-active {
+  background: var(--b3-list-hover);
+}
+.kmp-row.kmp-current .kmp-type {
+  background: var(--b3-theme-primary);
+  color: var(--b3-theme-on-primary);
+}
+.kmp-type {
+  flex: none;
+  font-size: 11px;
+  line-height: 18px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--b3-theme-surface-lighter);
+  color: var(--b3-theme-on-surface);
+  margin-top: 1px;
+}
+.kmp-main {
+  min-width: 0;
+  flex: 1;
+}
+.kmp-text {
+  font-size: 13.5px;
+  line-height: 20px;
+  color: var(--b3-theme-on-background);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-all;
+}
+.kmp-text mark {
+  background: var(--b3-card-warning-background);
+  color: var(--b3-card-warning-color);
+}
+.kmp-path {
+  font-size: 12px;
+  color: var(--b3-theme-on-surface-light);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kmp-empty {
+  padding: 24px 8px;
+  text-align: center;
+  color: var(--b3-theme-on-surface-light);
+}
+.kmp-foot {
+  font-size: 12px;
+  color: var(--b3-theme-on-surface-light);
+  text-align: right;
+}
+
+/* 书目来源选择器 */
+.kmp-tree .kmp-node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: var(--b3-border-radius);
+  cursor: pointer;
+}
+.kmp-tree .kmp-node:hover {
+  background: var(--b3-list-hover);
+}
+.kmp-tree .kmp-node.kmp-current {
+  background: var(--b3-theme-primary-lightest);
+}
+.kmp-toggle {
+  flex: none;
+  width: 16px;
+  text-align: center;
+  color: var(--b3-theme-on-surface-light);
+  transition: transform .15s;
+}
+.kmp-toggle.kmp-open {
+  transform: rotate(90deg);
+}
+.kmp-node-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kmp-node-name small {
+  margin-left: 6px;
+  color: var(--b3-theme-on-surface-light);
+}

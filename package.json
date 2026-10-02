@@ -1,0 +1,19 @@
+{
+  "name": "kmind-palace",
+  "private": true,
+  "packageManager": "pnpm@11.15.0",
+  "scripts": {
+    "dev:core": "pnpm --filter @kmind-palace/core dev",
+    "dev:siyuan": "pnpm --filter kmind-palace-siyuan dev",
+    "build:siyuan": "pnpm --filter kmind-palace-siyuan build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "dev:obsidian": "pnpm --filter kmind-palace-obsidian dev",
+    "build:obsidian": "pnpm --filter kmind-palace-obsidian build"
+  },
+  "license": "MPL-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/suka233/kmind-palace.git"
+  }
+}

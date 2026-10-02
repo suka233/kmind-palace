@@ -1,0 +1,24 @@
+{
+  "name": "kmind-palace",
+  "author": "suka",
+  "url": "https://github.com/suka233/kmind-palace",
+  "version": "0.1.0",
+  "minAppVersion": "3.8.5",
+  "backends": ["windows", "linux", "darwin", "ios", "android", "harmony", "docker", "all"],
+  "frontends": ["desktop", "mobile", "browser-desktop", "browser-mobile", "desktop-window", "all"],
+  "displayName": {
+    "default": "KMind Palace",
+    "zh-CN": "思维宫殿"
+  },
+  "description": {
+    "default": "Walk-in 3D memory palaces for your notes: bind blocks to furniture and books, recall along routes with SiYuan flashcards, guided by a little pet butler.",
+    "zh-CN": "把笔记放进可以走进去的 3D 记忆宫殿：家具和书架上的书绑定笔记块，沿路线回忆、和思源闪卡互通，宫殿里还有一只陪你复习的小管家。"
+  },
+  "readme": {
+    "default": "README.md",
+    "zh-CN": "README.zh-CN.md"
+  },
+  "icon": "icon.png",
+  "preview": "preview.webp",
+  "keywords": ["记忆宫殿", "思维宫殿", "位置记忆法", "闪卡", "间隔重复", "3D", "memory palace", "method of loci", "spaced repetition", "flashcards", "three.js"]
+}

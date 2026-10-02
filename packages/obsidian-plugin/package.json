@@ -1,0 +1,23 @@
+{
+  "name": "kmind-palace-obsidian",
+  "version": "0.1.0",
+  "private": true,
+  "description": "思维宫殿 · Obsidian plugin",
+  "scripts": {
+    "dev": "node esbuild.config.mjs --watch",
+    "build:dev": "node esbuild.config.mjs",
+    "build": "node esbuild.config.mjs --production",
+    "link": "node scripts/link.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@kmind-palace/core": "workspace:*"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "obsidian": "1.13.1",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.2"
+  }
+}

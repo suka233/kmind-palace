@@ -1,0 +1,27 @@
+{
+  "name": "kmind-palace-siyuan",
+  "version": "0.1.0",
+  "private": true,
+  "description": "思维宫殿 · SiYuan plugin",
+  "scripts": {
+    "dev": "webpack --config webpack.config.js --mode development",
+    "build:dev": "webpack --config webpack.config.js --mode development --env once",
+    "build": "webpack --config webpack.config.js --mode production",
+    "link": "node scripts/link.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@kmind-palace/core": "workspace:*"
+  },
+  "devDependencies": {
+    "copy-webpack-plugin": "^14.0.0",
+    "css-loader": "^7.1.4",
+    "esbuild-loader": "^4.5.0",
+    "mini-css-extract-plugin": "^2.10.2",
+    "siyuan": "1.2.8",
+    "typescript": "^5.9.0",
+    "webpack": "^5.107.2",
+    "webpack-cli": "^7.0.3",
+    "zip-webpack-plugin": "^4.0.3"
+  }
+}
