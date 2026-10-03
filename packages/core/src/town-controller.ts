@@ -3,9 +3,9 @@ import type { PalaceView } from './view';
 import { boundLoci, locusKey, type PalaceDoc, type Vec2 } from './schema';
 import type { RegionLayer } from './world-layer';
 import { ICONS, escapeHtml, timeAgo } from './icons';
+import { html, rich } from './dom';
 import { TEMPLATES, createFromTemplate } from './templates/basic';
 import { THEMES, getTheme } from './themes';
-import { itemDisplayName } from './build';
 import * as W from './world';
 import { JourneyPanel } from './journey-panel';
 import { pruneJourneys } from './journey';
@@ -20,6 +20,8 @@ import { t } from './i18n';
 
 const GRASS_Y = -.15;
 const PEEK_DELAY = 280;
+
+/** SVG 的子元素要放在 <svg> 里解析才是 SVG 元素：包一层再取出里面的节点（只有 <path> 的图标、插图里的片段） */
 
 interface PaletteItem { kind: 'palace' | 'locus' | 'region'; id: string; item?: string; title: string; sub: string; color: string }
 type Drag =
@@ -43,7 +45,7 @@ export class TownController {
   private palette: PaletteItem[] = [];
   private paletteSel = 0;
   private confirmResolve: ((ok: boolean) => void) | null = null;
-  private planCache = new Map<string, string>();
+  private planCache = new Map<string, DocumentFragment>();
   /** 旅程面板（跨宫殿路线） */
   journeys: JourneyPanel;
 
@@ -111,52 +113,52 @@ export class TownController {
   // =====================================================================
 
   private buildUI() {
-    const html = `
+    this.v.root.append(html`
       <div class="kp-brand kp-glass kp-town-only">
-        <div class="kp-mark" data-ref="townMark">${ICONS.logo}</div>
+        <div class="kp-mark" data-ref="townMark">${rich(ICONS.logo)}</div>
         <div style="min-width:0">
           <div class="kp-title" data-ref="townTitle"></div>
           <div class="kp-sub" data-ref="townSub"></div>
         </div>
-        <button class="kp-loci-btn kp-near-only" data-act="regionSettings" title="${t('这座岛的名字和场景')}">${ICONS.map}<span>${t('岛屿')}</span></button>
+        <button class="kp-loci-btn kp-near-only" data-act="regionSettings" title="${t('这座岛的名字和场景')}">${rich(ICONS.map)}<span>${t('岛屿')}</span></button>
       </div>
       <div class="kp-topright kp-iso-only">
         <div class="kp-seg kp-glass kp-town-only kp-town-view">
-          <button class="kp-on" data-act="viewMap" data-ref="segMap" title="${t('地图')}">${ICONS.map}<span>${t('地图')}</span></button>
-          <button data-act="viewList" data-ref="segList" title="${t('宫殿列表')}">${ICONS.list}<span>${t('列表')}</span></button>
-          <button data-act="viewJourneys" data-ref="segJourney" title="${t('旅程：把几座宫殿的路线串起来回忆')}">${ICONS.route}<span>${t('旅程')}</span></button>
+          <button class="kp-on" data-act="viewMap" data-ref="segMap" title="${t('地图')}">${rich(ICONS.map)}<span>${t('地图')}</span></button>
+          <button data-act="viewList" data-ref="segList" title="${t('宫殿列表')}">${rich(ICONS.list)}<span>${t('列表')}</span></button>
+          <button data-act="viewJourneys" data-ref="segJourney" title="${t('旅程：把几座宫殿的路线串起来回忆')}">${rich(ICONS.route)}<span>${t('旅程')}</span></button>
         </div>
-        <button class="kp-search kp-glass" data-act="palette" title="${t('搜索宫殿、记忆桩或岛（⌘K / Ctrl+K）')}">${ICONS.search}<span>${t('搜索宫殿或记忆桩')}</span><kbd>⌘K</kbd></button>
+        <button class="kp-search kp-glass" data-act="palette" title="${t('搜索宫殿、记忆桩或岛（⌘K / Ctrl+K）')}">${rich(ICONS.search)}<span>${t('搜索宫殿或记忆桩')}</span><kbd>⌘K</kbd></button>
       </div>
       <nav class="kp-bar kp-glass kp-town-only kp-town-view kp-near-only">
-        <button class="kp-primary" data-act="buildPalace" title="${t('在这座岛上建造一座新宫殿')}">${ICONS.plus}<span>${t('建造宫殿')}</span></button>
-        <button data-act="townEdit" title="${t('布置小镇：拖动宫殿换位置、旋转（B）')}">${ICONS.move}<span>${t('布置')}</span></button>
+        <button class="kp-primary" data-act="buildPalace" title="${t('在这座岛上建造一座新宫殿')}">${rich(ICONS.plus)}<span>${t('建造宫殿')}</span></button>
+        <button data-act="townEdit" title="${t('布置小镇：拖动宫殿换位置、旋转（B）')}">${rich(ICONS.move)}<span>${t('布置')}</span></button>
         <span class="kp-sep"></span>
-        <button data-act="toWorld" title="${t('拉远，看看所有的岛')}">${ICONS.globe}<span>${t('群岛')}</span></button>
-        <button class="kp-icon" data-act="rotl" title="${t('向左旋转 90°（Q）')}">${ICONS.rotl}</button>
-        <button class="kp-icon" data-act="rotr" title="${t('向右旋转 90°（E）')}">${ICONS.rotr}</button>
-        <button data-act="night" title="${t('日 / 夜（N）')}"><svg class="kp-i" viewBox="0 0 24 24" data-night-icon>${ICONS.moon}</svg><span data-night-text>${t('夜晚')}</span></button>
-        <button data-act="reset" title="${t('复位视角（R）')}">${ICONS.reset}<span>${t('复位')}</span></button>
+        <button data-act="toWorld" title="${t('拉远，看看所有的岛')}">${rich(ICONS.globe)}<span>${t('群岛')}</span></button>
+        <button class="kp-icon" data-act="rotl" title="${t('向左旋转 90°（Q）')}">${rich(ICONS.rotl)}</button>
+        <button class="kp-icon" data-act="rotr" title="${t('向右旋转 90°（E）')}">${rich(ICONS.rotr)}</button>
+        <button data-act="night" title="${t('日 / 夜（N）')}"><svg class="kp-i" viewBox="0 0 24 24" data-night-icon>${rich(ICONS.moon)}</svg><span data-night-text>${t('夜晚')}</span></button>
+        <button data-act="reset" title="${t('复位视角（R）')}">${rich(ICONS.reset)}<span>${t('复位')}</span></button>
       </nav>
       <nav class="kp-bar kp-glass kp-town-only kp-town-view kp-far-only">
-        <button class="kp-primary" data-act="newIsland" title="${t('开辟一座新的岛')}">${ICONS.plus}<span>${t('开辟新岛')}</span></button>
-        <button data-act="townEdit" title="${t('布置岛屿：拖动岛换位置（B）')}">${ICONS.move}<span>${t('布置岛屿')}</span></button>
+        <button class="kp-primary" data-act="newIsland" title="${t('开辟一座新的岛')}">${rich(ICONS.plus)}<span>${t('开辟新岛')}</span></button>
+        <button data-act="townEdit" title="${t('布置岛屿：拖动岛换位置（B）')}">${rich(ICONS.move)}<span>${t('布置岛屿')}</span></button>
         <span class="kp-sep"></span>
-        <button class="kp-no-planet" data-act="toPlanet" title="${t('继续拉远：整个世界卷成一颗小星球')}">${ICONS.planet}<span>${t('星球')}</span></button>
-        <button class="kp-planet-only" data-act="toWorld" title="${t('回到群岛全景')}">${ICONS.globe}<span>${t('群岛')}</span></button>
-        <button class="kp-icon" data-act="rotl" title="${t('向左旋转 90°（Q）')}">${ICONS.rotl}</button>
-        <button class="kp-icon" data-act="rotr" title="${t('向右旋转 90°（E）')}">${ICONS.rotr}</button>
-        <button data-act="night" title="${t('日 / 夜（N）')}"><svg class="kp-i" viewBox="0 0 24 24" data-night-icon>${ICONS.moon}</svg><span data-night-text>${t('夜晚')}</span></button>
-        <button data-act="reset" title="${t('全景（R）')}">${ICONS.reset}<span>${t('全景')}</span></button>
+        <button class="kp-no-planet" data-act="toPlanet" title="${t('继续拉远：整个世界卷成一颗小星球')}">${rich(ICONS.planet)}<span>${t('星球')}</span></button>
+        <button class="kp-planet-only" data-act="toWorld" title="${t('回到群岛全景')}">${rich(ICONS.globe)}<span>${t('群岛')}</span></button>
+        <button class="kp-icon" data-act="rotl" title="${t('向左旋转 90°（Q）')}">${rich(ICONS.rotl)}</button>
+        <button class="kp-icon" data-act="rotr" title="${t('向右旋转 90°（E）')}">${rich(ICONS.rotr)}</button>
+        <button data-act="night" title="${t('日 / 夜（N）')}"><svg class="kp-i" viewBox="0 0 24 24" data-night-icon>${rich(ICONS.moon)}</svg><span data-night-text>${t('夜晚')}</span></button>
+        <button data-act="reset" title="${t('全景（R）')}">${rich(ICONS.reset)}<span>${t('全景')}</span></button>
       </nav>
       <nav class="kp-bar kp-glass kp-town-only kp-town-edit">
         <span class="kp-bar-hint" data-ref="townEditHint"></span>
-        <button class="kp-icon kp-near-only" data-act="townRotate" title="${t('旋转选中的宫殿 90°（R）')}">${ICONS.rotr}</button>
+        <button class="kp-icon kp-near-only" data-act="townRotate" title="${t('旋转选中的宫殿 90°（R）')}">${rich(ICONS.rotr)}</button>
         <span class="kp-sep"></span>
-        <button class="kp-icon" data-act="townUndo" data-ref="townUndo" title="${t('撤销（⌘Z）')}" disabled>${ICONS.undo}</button>
-        <button class="kp-icon" data-act="townRedo" data-ref="townRedo" title="${t('重做（⇧⌘Z）')}" disabled>${ICONS.redo}</button>
+        <button class="kp-icon" data-act="townUndo" data-ref="townUndo" title="${t('撤销（⌘Z）')}" disabled>${rich(ICONS.undo)}</button>
+        <button class="kp-icon" data-act="townRedo" data-ref="townRedo" title="${t('重做（⇧⌘Z）')}" disabled>${rich(ICONS.redo)}</button>
         <span class="kp-sep"></span>
-        <button class="kp-primary" data-act="townEditDone" title="${t('完成布置（Esc）')}">${ICONS.check}<span>${t('完成')}</span></button>
+        <button class="kp-primary" data-act="townEditDone" title="${t('完成布置（Esc）')}">${rich(ICONS.check)}<span>${t('完成')}</span></button>
       </nav>
       <div class="kp-place kp-glass kp-town-only kp-town-placing-only"><span data-ref="townPlaceHint"></span><button data-act="townPlaceCancel">${t('取消')}</button></div>
       <div class="kp-card kp-glass kp-hidden kp-town-only" data-ref="townCard"></div>
@@ -165,7 +167,7 @@ export class TownController {
       <div class="kp-routes kp-journeys kp-glass kp-hidden kp-town-only" data-ref="journeyPanel"></div>
       <div class="kp-overlay kp-hidden" data-ref="paletteWrap">
         <div class="kp-palette kp-glass">
-          <label class="kp-pal-input">${ICONS.search}<input data-ref="paletteInput" placeholder="${t('搜索宫殿、记忆桩或岛…')}" autocomplete="off" spellcheck="false"></label>
+          <label class="kp-pal-input">${rich(ICONS.search)}<input data-ref="paletteInput" placeholder="${t('搜索宫殿、记忆桩或岛…')}" autocomplete="off" spellcheck="false"></label>
           <div class="kp-pal-list" data-ref="paletteList"></div>
           <div class="kp-pal-foot"><span><kbd>↑</kbd><kbd>↓</kbd> ${t('选择')}</span><span><kbd>Enter</kbd> ${t('前往')}</span><span><kbd>Esc</kbd> ${t('关闭')}</span></div>
         </div>
@@ -176,8 +178,7 @@ export class TownController {
           <p data-ref="confirmMsg"></p>
           <div class="kp-row"><button data-act="confirmNo">${t('取消')}</button><button class="kp-danger-strong" data-act="confirmYes" data-ref="confirmYes">${t('删除')}</button></div>
         </div>
-      </div>`;
-    this.v.root.insertAdjacentHTML('beforeend', html);
+      </div>`);
     this.v.root.querySelectorAll<HTMLElement>('[data-ref]').forEach(el => { this.v.ui[el.dataset.ref] = el; });
   }
 
@@ -193,7 +194,7 @@ export class TownController {
       v.ui.townSub.textContent = v.planet > .6
         ? `${t('{n} 座岛', { n: this.world.regions.length })} · ${t('拖动转动星球 · 滚轮拉近')}`
         : [t('{n} 座岛', { n: this.world.regions.length }), t('{n} 座宫殿', { n: placed }), t('{n} 个记忆桩', { n: loci })].join(' · ');
-      v.ui.townMark.innerHTML = ICONS.globe;
+      v.ui.townMark.replaceChildren(html`${rich(ICONS.globe)}`);
     } else {
       const docs = this.region.palaces.map(p => this.docs.get(p.palaceId)).filter(Boolean);
       const loci = docs.reduce((s, d) => s + W.palaceStats(d).loci, 0);
@@ -213,7 +214,7 @@ export class TownController {
     }
     if (this.selectedId && !this.docs.has(this.selectedId)) this.selectedId = null;
     if (this.selectedRegion && !this.regionById(this.selectedRegion)) this.selectedRegion = null;
-    v.ui.townEditHint.innerHTML = v.far ? t('拖动岛换位置 · 岛和岛之间会留出海面') : t('拖动宫殿换位置 · <b>R</b> 旋转');
+    v.ui.townEditHint.replaceChildren(html`${v.far ? t('拖动岛换位置 · 岛和岛之间会留出海面') : rich(t('拖动宫殿换位置 · <b>R</b> 旋转'))}`);
     this.renderCard();
     if (this.listOpen) this.renderList();
     this.updateUndoButtons();
@@ -239,7 +240,7 @@ export class TownController {
     this.tagHover = null;
     this.v.ui.townCard.classList.add('kp-hidden');
     this.v.setMarker(null);
-    this.v.renderer.domElement.style.cursor = '';
+    this.v.setCursor('');
     for (const s of this.town.shells.values()) s.tag.element.classList.remove('kp-hot', 'kp-sel');
     for (const l of this.town.regions.values()) l.tag.element.classList.remove('kp-hot', 'kp-sel');
   }
@@ -308,7 +309,7 @@ export class TownController {
         if (v.far) this.setRegionHover(this.pickRegion(e));
         else this.setHover(this.pickPalace(e) ?? this.tagHover);
         this.showTip(e);
-      } else v.ui.tip.style.opacity = '0';
+      } else v.ui.tip.classList.remove('kp-on');
     }
     const busy = v.far || this.editing || !!this.placing || !!this.drag || !!v.camTween;
     const target = busy ? null : (this.hoveredId ?? this.selectedId);
@@ -325,7 +326,7 @@ export class TownController {
     this.hoverSince = performance.now();
     if (old) this.town.shells.get(old)?.tag.element.classList.remove('kp-hot');
     if (id) this.town.shells.get(id)?.tag.element.classList.add('kp-hot');
-    this.v.renderer.domElement.style.cursor = id ? 'pointer' : '';
+    this.v.setCursor(id ? 'pointer' : '');
     const peek = this.v.peek;
     if (peek?.open && peek.id !== id && peek.id !== this.selectedId) this.v.closePeek();
     this.v.ui.townList.querySelectorAll('.kp-list-row[data-id]').forEach(r => r.classList.toggle('kp-hot', (r as HTMLElement).dataset.id === id));
@@ -338,13 +339,13 @@ export class TownController {
     this.hoveredRegion = id;
     if (old) this.layerOf(old)?.tag.element.classList.remove('kp-hot');
     if (id) this.layerOf(id)?.tag.element.classList.add('kp-hot');
-    this.v.renderer.domElement.style.cursor = id ? 'pointer' : '';
+    this.v.setCursor(id ? 'pointer' : '');
   }
 
   onPointerLeave() {
     if (!this.tagHover) this.setHover(null);
     this.setRegionHover(null);
-    this.v.ui.tip.style.opacity = '0';
+    this.v.ui.tip.classList.remove('kp-on');
   }
 
   /** 悬停提示：名字 + 操作方式 */
@@ -352,14 +353,14 @@ export class TownController {
     const v = this.v, tip = v.ui.tip;
     if (v.far) {
       const r = this.hoveredRegion && this.regionById(this.hoveredRegion);
-      if (!r) { tip.style.opacity = '0'; return; }
-      tip.innerHTML = `${escapeHtml(r.name)}<small>${this.editing ? t('拖动换位置') : t('双击前往 · 单击查看')}</small>`;
+      if (!r) { tip.classList.remove('kp-on'); return; }
+      tip.replaceChildren(html`${r.name}<small>${this.editing ? t('拖动换位置') : t('双击前往 · 单击查看')}</small>`);
       v.placeTip(e);
       return;
     }
     const doc = this.hoveredId && !this.tagHover ? this.docs.get(this.hoveredId) : null;
-    if (!doc) { tip.style.opacity = '0'; return; }
-    tip.innerHTML = `${escapeHtml(doc.name)}<small>${this.editing ? t('拖动换位置 · R 旋转') : t('双击进入 · 单击查看')}</small>`;
+    if (!doc) { tip.classList.remove('kp-on'); return; }
+    tip.replaceChildren(html`${doc.name}<small>${this.editing ? t('拖动换位置 · R 旋转') : t('双击进入 · 单击查看')}</small>`);
     v.placeTip(e);
   }
 
@@ -431,41 +432,41 @@ export class TownController {
     const others = this.world.regions.filter(r => r !== here);
     if (v.readonly) {
       // 参观好友 / 网页查看器：只能看
-      card.innerHTML = `
+      card.replaceChildren(html`
         <button class="kp-close" data-act="townDeselect">×</button>
-        <div class="kp-room">${v.visiting ? t('{name} 的宫殿', { name: escapeHtml(v.visiting.owner.name) }) : t('宫殿')}</div>
+        <div class="kp-room">${v.visiting ? t('{name} 的宫殿', { name: v.visiting.owner.name }) : t('宫殿')}</div>
         <h3 class="kp-ro-name"></h3>
         <div class="kp-stats">${t('{n} 个房间', { n: st.rooms })} · ${t('{n} 个物件', { n: st.items })}${st.loci ? ` · 📌 ${t('{n} 个公开的记忆桩', { n: st.loci })}` : ''}</div>
-        ${bound.length ? `<div class="kp-subtitle">${t('记忆桩')}</div><div class="kp-mini">${bound.slice(0, 4).map(it => `
-          <button data-act="palaceLocus" data-item="${escapeHtml(locusKey(it.item.id, it.slot))}"><b>${escapeHtml(it.binding.title || '')}</b><span>${escapeHtml(v.locusName(it.item, it.slot))}</span></button>`).join('')}</div>` : ''}
-        <div class="kp-row"><button class="kp-primary kp-grow" data-act="palaceEnter">${t('进去参观 →')}</button></div>`;
+        ${bound.length ? html`<div class="kp-subtitle">${t('记忆桩')}</div><div class="kp-mini">${bound.slice(0, 4).map(it => html`
+          <button data-act="palaceLocus" data-item="${locusKey(it.item.id, it.slot)}"><b>${it.binding.title || ''}</b><span>${v.locusName(it.item, it.slot)}</span></button>`)}</div>` : ''}
+        <div class="kp-row"><button class="kp-primary kp-grow" data-act="palaceEnter">${t('进去参观 →')}</button></div>`);
       card.querySelector('.kp-ro-name').textContent = doc.name;
       card.classList.remove('kp-hidden');
       return;
     }
-    card.innerHTML = `
+    card.replaceChildren(html`
       <button class="kp-close" data-act="townDeselect">×</button>
-      <div class="kp-room">${t('宫殿 · {time}更新', { time: escapeHtml(timeAgo(doc.updatedAt)) })}</div>
+      <div class="kp-room">${t('宫殿 · {time}更新', { time: timeAgo(doc.updatedAt) })}</div>
       <input class="kp-name" data-field="palaceName" maxlength="40" spellcheck="false">
-      <div class="kp-stats">${t('{n} 个房间', { n: st.rooms })} · ${t('{n} 个物件', { n: st.items })} · 📌 ${st.loci}${v.dueCount(doc) ? ` · <b class="kp-due-text">${t('待复习 {n}', { n: v.dueCount(doc) })}</b>` : ''}</div>
-      ${bound.length ? `<div class="kp-row kp-recall-row"><button class="kp-primary" data-act="palaceRecall" data-id="${escapeHtml(doc.id)}">${ICONS.route}<span>${t('进去回忆')}${v.dueCount(doc) ? ` · ${t('{n} 个待复习', { n: v.dueCount(doc) })}` : ''}</span></button></div>` : ''}
-      ${bound.length ? `<div class="kp-subtitle">${t('记忆桩')}</div><div class="kp-mini">${bound.slice(0, 4).map(it => `
-        <button data-act="palaceLocus" data-item="${escapeHtml(locusKey(it.item.id, it.slot))}"><b>${escapeHtml(it.binding.title || it.binding.blockId)}</b><span>${escapeHtml(v.locusName(it.item, it.slot))}</span></button>`).join('')}
-        ${bound.length > 4 ? `<div class="kp-more-note">${t('还有 {n} 个…', { n: bound.length - 4 })}</div>` : ''}</div>` : ''}
+      <div class="kp-stats">${t('{n} 个房间', { n: st.rooms })} · ${t('{n} 个物件', { n: st.items })} · 📌 ${st.loci}${v.dueCount(doc) ? html` · <b class="kp-due-text">${t('待复习 {n}', { n: v.dueCount(doc) })}</b>` : ''}</div>
+      ${bound.length ? html`<div class="kp-row kp-recall-row"><button class="kp-primary" data-act="palaceRecall" data-id="${doc.id}">${rich(ICONS.route)}<span>${t('进去回忆')}${v.dueCount(doc) ? ` · ${t('{n} 个待复习', { n: v.dueCount(doc) })}` : ''}</span></button></div>` : ''}
+      ${bound.length ? html`<div class="kp-subtitle">${t('记忆桩')}</div><div class="kp-mini">${bound.slice(0, 4).map(it => html`
+        <button data-act="palaceLocus" data-item="${locusKey(it.item.id, it.slot)}"><b>${it.binding.title || it.binding.blockId}</b><span>${v.locusName(it.item, it.slot)}</span></button>`)}
+        ${bound.length > 4 ? html`<div class="kp-more-note">${t('还有 {n} 个…', { n: bound.length - 4 })}</div>` : ''}</div>` : ''}
       <div class="kp-subtitle">${t('主题色')}</div>
-      <div class="kp-swatches kp-swatches-10">${W.PALACE_COLORS.map(c => `<span class="kp-swatch${c === color ? ' kp-on' : ''}" data-act="palaceColor" data-color="${c}" style="background:${c}" title="${c}"></span>`).join('')}</div>
+      <div class="kp-swatches kp-swatches-10">${W.PALACE_COLORS.map(c => html`<span class="kp-swatch${c === color ? ' kp-on' : ''}" data-act="palaceColor" data-color="${c}" style="background:${c}" title="${c}"></span>`)}</div>
       <div class="kp-subtitle">${t('屋顶')}</div>
-      <div class="kp-seg kp-seg-full">${roofs.map(([k, l]) => `<button data-act="palaceRoof" data-roof="${k}" class="${roof === k ? 'kp-on' : ''}">${l}</button>`).join('')}</div>
-      ${others.length ? `<label class="kp-field kp-move-to"><span>${t('搬到')}</span><select data-field="palaceRegion">
-        <option value="">${escapeHtml(getTheme(here?.theme).icon + ' ' + (here?.name || ''))}${t('（当前）')}</option>
-        ${others.map(r => `<option value="${escapeHtml(r.id)}">${escapeHtml(getTheme(r.theme).icon + ' ' + r.name)}</option>`).join('')}
+      <div class="kp-seg kp-seg-full">${roofs.map(([k, l]) => html`<button data-act="palaceRoof" data-roof="${k}" class="${roof === k ? 'kp-on' : ''}">${l}</button>`)}</div>
+      ${others.length ? html`<label class="kp-field kp-move-to"><span>${t('搬到')}</span><select data-field="palaceRegion">
+        <option value="">${getTheme(here?.theme).icon + ' ' + (here?.name || '')}${t('（当前）')}</option>
+        ${others.map(r => html`<option value="${r.id}">${getTheme(r.theme).icon + ' ' + r.name}</option>`)}
       </select></label>` : ''}
-      ${v.social?.publishSection(doc) || ''}
+      ${v.social?.publishSection(doc)}
       <div class="kp-row">
-        <button data-act="palaceMove" title="${t('拖动到别处 / 旋转')}">${ICONS.move} ${t('移动')}</button>
+        <button data-act="palaceMove" title="${t('拖动到别处 / 旋转')}">${rich(ICONS.move)} ${t('移动')}</button>
         <button class="kp-danger" data-act="palaceDelete" title="${t('删除这座宫殿')}">${t('删除')}</button>
         <button class="kp-primary kp-grow" data-act="palaceEnter">${t('进入宫殿 →')}</button>
-      </div>`;
+      </div>`);
     (card.querySelector('[data-field="palaceName"]') as HTMLInputElement).value = doc.name;
     card.classList.remove('kp-hidden');
   }
@@ -478,23 +479,23 @@ export class TownController {
     const docs = r.palaces.map(p => this.docs.get(p.palaceId)).filter(Boolean);
     const loci = docs.reduce((s, d) => s + W.palaceStats(d).loci, 0);
     const last = this.world.regions.length <= 1;
-    card.innerHTML = `
+    card.replaceChildren(html`
       <button class="kp-close" data-act="regionDeselect">×</button>
-      <div class="kp-room">${t('岛屿')} · ${theme.icon} ${escapeHtml(t(theme.name))}</div>
+      <div class="kp-room">${t('岛屿')} · ${theme.icon} ${t(theme.name)}</div>
       <input class="kp-name" data-field="regionName" maxlength="40" spellcheck="false">
       <div class="kp-stats">${t('{n} 座宫殿', { n: docs.length })} · 📌 ${loci}</div>
       <div class="kp-subtitle">${t('场景')}</div>
-      <div class="kp-themes">${THEMES.map(th => `
-        <button class="kp-theme${th.id === r.theme ? ' kp-on' : ''}" data-act="regionTheme" data-theme="${th.id}" title="${escapeHtml(t(th.desc))}">
-          <i style="background:linear-gradient(135deg, ${th.colors[0]} 0 55%, ${th.colors[1]} 55% 78%, ${th.colors[2]} 78%)">${th.icon}</i><span>${escapeHtml(t(th.name))}</span>
-        </button>`).join('')}</div>
-      ${docs.length ? `<div class="kp-subtitle">${t('岛上的宫殿')}</div><div class="kp-mini">${docs.slice(0, 5).map(d => `
-        <button data-act="regionPalace" data-id="${escapeHtml(d.id)}"><b>${escapeHtml(d.name)}</b><span>📌 ${W.palaceStats(d).loci}</span></button>`).join('')}
-        ${docs.length > 5 ? `<div class="kp-more-note">${t('还有 {n} 座…', { n: docs.length - 5 })}</div>` : ''}</div>` : `<div class="kp-note-sm">${t('这座岛还是空的，前往后点「建造宫殿」。')}</div>`}
+      <div class="kp-themes">${THEMES.map(th => html`
+        <button class="kp-theme${th.id === r.theme ? ' kp-on' : ''}" data-act="regionTheme" data-theme="${th.id}" title="${t(th.desc)}">
+          <i style="background:linear-gradient(135deg, ${th.colors[0]} 0 55%, ${th.colors[1]} 55% 78%, ${th.colors[2]} 78%)">${th.icon}</i><span>${t(th.name)}</span>
+        </button>`)}</div>
+      ${docs.length ? html`<div class="kp-subtitle">${t('岛上的宫殿')}</div><div class="kp-mini">${docs.slice(0, 5).map(d => html`
+        <button data-act="regionPalace" data-id="${d.id}"><b>${d.name}</b><span>📌 ${W.palaceStats(d).loci}</span></button>`)}
+        ${docs.length > 5 ? html`<div class="kp-more-note">${t('还有 {n} 座…', { n: docs.length - 5 })}</div>` : ''}</div>` : html`<div class="kp-note-sm">${t('这座岛还是空的，前往后点「建造宫殿」。')}</div>`}
       <div class="kp-row">
         <button class="kp-danger" data-act="regionDelete" ${docs.length || last ? 'disabled' : ''} title="${last ? t('至少要保留一座岛') : docs.length ? t('先把岛上的宫殿搬走或删除') : t('删除这座空岛')}">${t('删除')}</button>
         <button class="kp-primary kp-grow" data-act="regionGo">${t('前往 →')}</button>
-      </div>`;
+      </div>`);
     (card.querySelector('[data-field="regionName"]') as HTMLInputElement).value = r.name;
     card.classList.remove('kp-hidden');
   }
@@ -649,15 +650,15 @@ export class TownController {
     this.toggleList(false);
     this.select(null);
     const n = this.region.palaces.length + 1;
-    panel.innerHTML = `
-      <div class="kp-panel-head"><b>${t('在「{name}」建造一座新宫殿', { name: escapeHtml(this.region.name) })}</b><button class="kp-close" data-act="closePanel">×</button></div>
+    panel.replaceChildren(html`
+      <div class="kp-panel-head"><b>${t('在「{name}」建造一座新宫殿', { name: this.region.name })}</b><button class="kp-close" data-act="closePanel">×</button></div>
       <label class="kp-field kp-name-field"><span>${t('名称')}</span><input class="kp-text" data-ref="newName" maxlength="40" spellcheck="false"></label>
-      <div class="kp-templates">${TEMPLATES.map(tpl => `
+      <div class="kp-templates">${TEMPLATES.map(tpl => html`
         <button class="kp-tpl" data-act="pickTemplate" data-tpl="${tpl.id}">
           <div class="kp-tpl-art">${this.planSvg(tpl.id)}</div>
-          <b>${escapeHtml(t(tpl.name))}</b><small>${escapeHtml(t(tpl.desc))}</small>
-        </button>`).join('')}</div>
-      <div class="kp-note">${t('选一个模板，然后在岛上点击空地放下。之后可以在宫殿里随意改造。')}</div>`;
+          <b>${t(tpl.name)}</b><small>${t(tpl.desc)}</small>
+        </button>`)}</div>
+      <div class="kp-note">${t('选一个模板，然后在岛上点击空地放下。之后可以在宫殿里随意改造。')}</div>`);
     const input = panel.querySelector('input') as HTMLInputElement;
     input.value = t('新宫殿 {n}', { n });
     v.ui.newName = input;
@@ -672,15 +673,15 @@ export class TownController {
     this.setEditing(false);
     this.toggleList(false);
     this.selectRegion(null);
-    panel.innerHTML = `
+    panel.replaceChildren(html`
       <div class="kp-panel-head"><b>${t('开辟一座新岛')}</b><button class="kp-close" data-act="closePanel">×</button></div>
       <label class="kp-field kp-name-field"><span>${t('名称')}</span><input class="kp-text" data-ref="newName" maxlength="40" spellcheck="false" placeholder="${t('不填就按场景起名')}"></label>
-      <div class="kp-templates">${THEMES.map(th => `
+      <div class="kp-templates">${THEMES.map(th => html`
         <button class="kp-tpl" data-act="pickTheme" data-theme="${th.id}">
           <div class="kp-tpl-art">${this.themeArt(th.id)}</div>
-          <b>${th.icon} ${escapeHtml(t(th.name))}</b><small>${escapeHtml(t(th.desc))}</small>
-        </button>`).join('')}</div>
-      <div class="kp-note">${t('新岛会出现在群岛旁边，之后可以在「布置岛屿」里拖到别处，也可以在岛屿设置里换场景。')}</div>`;
+          <b>${th.icon} ${t(th.name)}</b><small>${t(th.desc)}</small>
+        </button>`)}</div>
+      <div class="kp-note">${t('新岛会出现在群岛旁边，之后可以在「布置岛屿」里拖到别处，也可以在岛屿设置里换场景。')}</div>`);
     const input = panel.querySelector('input') as HTMLInputElement;
     v.ui.newName = input;
     this.panel = 'island';
@@ -695,27 +696,27 @@ export class TownController {
 
   /** 模板的迷你平面图 */
   private planSvg(id: string) {
-    if (this.planCache.has(id)) return this.planCache.get(id);
+    if (this.planCache.has(id)) return this.planCache.get(id).cloneNode(true) as DocumentFragment;
     const doc = createFromTemplate(id, 'x');
     const rooms = doc.rooms.filter(r => r.floor);
     const bb = W.bboxOf(rooms.map(r => r.rect));
     const pad = .6, w = bb[2] - bb[0] + pad * 2, h = bb[3] - bb[1] + pad * 2;
     const fills: Record<string, string> = { oak: '#e6cfae', oakWarm: '#d4b08a', deck: '#bfa089', tileLarge: '#e9e4dc', tileBath: '#d9e4e0', cement: '#dcd3c6' };
-    const svg = `<svg viewBox="${bb[0] - pad} ${bb[1] - pad} ${w} ${h}" preserveAspectRatio="xMidYMid meet">${rooms.map(r => {
+    const svg = html`<svg viewBox="${bb[0] - pad} ${bb[1] - pad} ${w} ${h}" preserveAspectRatio="xMidYMid meet">${rooms.map(r => {
       const [x0, z0, x1, z1] = r.rect;
-      return `<rect x="${x0}" y="${z0}" width="${x1 - x0}" height="${z1 - z0}" fill="${fills[r.floor] || '#e6cfae'}" stroke="#4a4139" stroke-width="${Math.max(w, h) * .018}"/>`;
-    }).join('')}</svg>`;
+      return html`<rect x="${x0}" y="${z0}" width="${x1 - x0}" height="${z1 - z0}" fill="${fills[r.floor] || '#e6cfae'}" stroke="#4a4139" stroke-width="${Math.max(w, h) * .018}"/>`;
+    })}</svg>`;
     this.planCache.set(id, svg);
-    return svg;
+    return svg.cloneNode(true) as DocumentFragment;
   }
 
   /** 场景主题的小插图：海 + 海岸 + 岛 + 图标 */
   private themeArt(id: string) {
     const t = getTheme(id), [g, shore, accent] = t.colors;
     const floating = !!t.lift;
-    return `<svg viewBox="0 0 100 70">
+    return html`<svg viewBox="0 0 100 70">
       <rect width="100" height="70" rx="8" fill="${floating ? '#dcecf5' : '#9fd3cf'}"/>
-      ${floating ? `<path d="M22 36 Q50 72 78 36 Z" fill="#8b7e6f"/><ellipse cx="30" cy="54" rx="12" ry="5" fill="#fff"/><ellipse cx="72" cy="58" rx="10" ry="4" fill="#fff"/>` : `<ellipse cx="50" cy="38" rx="38" ry="22" fill="${shore}"/>`}
+      ${floating ? html`<path d="M22 36 Q50 72 78 36 Z" fill="#8b7e6f"/><ellipse cx="30" cy="54" rx="12" ry="5" fill="#fff"/><ellipse cx="72" cy="58" rx="10" ry="4" fill="#fff"/>` : html`<ellipse cx="50" cy="38" rx="38" ry="22" fill="${shore}"/>`}
       <ellipse cx="50" cy="${floating ? 34 : 36}" rx="${floating ? 30 : 33}" ry="${floating ? 12 : 18}" fill="${g}"/>
       <circle cx="${floating ? 60 : 64}" cy="${floating ? 30 : 30}" r="5" fill="${accent}"/>
       <text x="50" y="${floating ? 36 : 42}" font-size="18" text-anchor="middle">${t.icon}</text>
@@ -736,7 +737,7 @@ export class TownController {
     this.closePanel();
     this.select(null);
     v.root.classList.add('kp-town-placing');
-    v.ui.townPlaceHint.innerHTML = t('把「{name}」放到岛上：点击空地放下 · <b>R</b> 旋转 · <b>Esc</b> 取消', { name: escapeHtml(name) });
+    v.ui.townPlaceHint.replaceChildren(html`${rich(t('把「{name}」放到岛上：点击空地放下 · <b>R</b> 旋转 · <b>Esc</b> 取消', { name: escapeHtml(name) }))}`);
     this.updateMarker(true);
     v.invalidate();
   }
@@ -939,23 +940,23 @@ export class TownController {
     const row = (d: PalaceDoc) => {
       const st = W.palaceStats(d), placed = v.placementOf(d.id);
       const color = placed?.roofColor || W.palaceColor(d);
-      return `<div class="kp-list-row${d.id === this.selectedId ? ' kp-on' : ''}" data-id="${escapeHtml(d.id)}">
-        <button class="kp-list-main" data-act="listPick" data-id="${escapeHtml(d.id)}">
+      return html`<div class="kp-list-row${d.id === this.selectedId ? ' kp-on' : ''}" data-id="${d.id}">
+        <button class="kp-list-main" data-act="listPick" data-id="${d.id}">
           <i style="background:${color}"></i>
-          <span><b>${escapeHtml(d.name)}</b><small>${t('{n} 个房间', { n: st.rooms })} · ${t('{n} 个物件', { n: st.items })} · 📌 ${st.loci} · ${escapeHtml(timeAgo(d.updatedAt))}</small></span>
+          <span><b>${d.name}</b><small>${t('{n} 个房间', { n: st.rooms })} · ${t('{n} 个物件', { n: st.items })} · 📌 ${st.loci} · ${timeAgo(d.updatedAt)}</small></span>
         </button>
-        <button class="kp-list-go" data-act="listEnter" data-id="${escapeHtml(d.id)}" title="${t('进入')}">→</button>
+        <button class="kp-list-go" data-act="listEnter" data-id="${d.id}" title="${t('进入')}">→</button>
       </div>`;
     };
-    v.ui.townList.innerHTML = `
+    v.ui.townList.replaceChildren(html`
       <div class="kp-panel-head"><b>${t('全部宫殿 · {n}', { n: total })}</b><button class="kp-close" data-act="viewMap">×</button></div>
       <div class="kp-list-body">${regions.map(r => {
         const docs = r.palaces.map(p => this.docs.get(p.palaceId)).filter(Boolean).sort((a, b) => b.updatedAt - a.updatedAt);
-        return `<button class="kp-list-group" data-act="listRegion" data-region="${escapeHtml(r.id)}">
-            <em>${getTheme(r.theme).icon}</em><b>${escapeHtml(r.name)}</b><small>${t('{n} 座', { n: docs.length })}</small></button>
-          ${docs.map(row).join('') || `<div class="kp-empty kp-empty-sm">${t('空岛')}</div>`}`;
-      }).join('')}</div>
-      <button class="kp-list-add" data-act="${v.far ? 'newIsland' : 'buildPalace'}">${ICONS.plus}<span>${v.far ? t('开辟新岛') : t('建造宫殿')}</span></button>`;
+        return html`<button class="kp-list-group" data-act="listRegion" data-region="${r.id}">
+            <em>${getTheme(r.theme).icon}</em><b>${r.name}</b><small>${t('{n} 座', { n: docs.length })}</small></button>
+          ${docs.length ? docs.map(row) : html`<div class="kp-empty kp-empty-sm">${t('空岛')}</div>`}`;
+      })}</div>
+      <button class="kp-list-add" data-act="${v.far ? 'newIsland' : 'buildPalace'}">${rich(ICONS.plus)}<span>${v.far ? t('开辟新岛') : t('建造宫殿')}</span></button>`);
   }
 
   // =====================================================================
@@ -969,7 +970,7 @@ export class TownController {
     input.value = '';
     this.paletteSel = 0;
     this.renderPalette();
-    requestAnimationFrame(() => input.focus());
+    window.requestAnimationFrame(() => input.focus());
   }
 
   closePalette() {
@@ -1020,12 +1021,12 @@ export class TownController {
     }
     const kinds = { palace: t('宫殿'), locus: t('记忆桩'), region: t('岛') };
     const list = v.ui.paletteList;
-    list.innerHTML = this.palette.map((it, i) => `
+    list.replaceChildren(html`${this.palette.length ? this.palette.map((it, i) => html`
       <button class="kp-pal-row${i === this.paletteSel ? ' kp-on' : ''}" data-act="palPick" data-i="${i}">
-        <i style="background:${it.color}"></i>${it.kind === 'locus' ? '<em>📌</em>' : ''}
-        <span><b>${escapeHtml(it.title)}</b><small>${escapeHtml(it.sub)}</small></span>
+        <i style="background:${it.color}"></i>${it.kind === 'locus' ? html`<em>📌</em>` : ''}
+        <span><b>${it.title}</b><small>${it.sub}</small></span>
         <kbd>${kinds[it.kind]}</kbd>
-      </button>`).join('') || `<div class="kp-empty">${t('没有找到匹配的宫殿、记忆桩或岛')}</div>`;
+      </button>`) : html`<div class="kp-empty">${t('没有找到匹配的宫殿、记忆桩或岛')}</div>`}`);
     list.querySelector('.kp-on')?.scrollIntoView({ block: 'nearest' });
   }
 
@@ -1033,7 +1034,7 @@ export class TownController {
     this.closePalette();
     const v = this.v;
     if (it.kind === 'region') {
-      if (v.level === 'palace') { v.exitPalace(); setTimeout(() => v.flyToRegion(it.id), 1200); } else v.flyToRegion(it.id);
+      if (v.level === 'palace') { v.exitPalace(); window.setTimeout(() => v.flyToRegion(it.id), 1200); } else v.flyToRegion(it.id);
     } else if (it.kind === 'palace') v.enterPalace(it.id);
     else v.enterPalace(it.id, { focusItem: it.item });
   }
@@ -1203,7 +1204,7 @@ export class TownController {
       case 'tag': if (!this.placing && !v.far) this.select(el.dataset.id); return true;
       case 'regionTag': if (!this.editing) this.selectRegion(el.dataset.id); return true;
       case 'buildPalace':
-        if (v.far) { v.flyToRegion(this.region.id); setTimeout(() => this.openBuild(), 900); } else this.openBuild();
+        if (v.far) { v.flyToRegion(this.region.id); window.setTimeout(() => this.openBuild(), 900); } else this.openBuild();
         return true;
       case 'newIsland': this.openNewIsland(); return true;
       case 'closePanel': this.closePanel(); return true;

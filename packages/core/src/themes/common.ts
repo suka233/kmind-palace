@@ -143,7 +143,7 @@ function landSide(c: Vec2, pts: Vec2[], top: number, bottom: number, bevel: numb
     return [x + dx / l * off, z + dz / l * off] as [number, number];
   });
   const ys: number[] = [];
-  rows.push(pts as [number, number][]); ys.push(top);
+  rows.push(pts); ys.push(top);
   if (bevel > 0) { rows.push(push(bevel)); ys.push(top - .12); }
   rows.push(push(Math.max(bevel, 0))); ys.push(bottom);
   const pos: number[] = [], uv: number[] = [], idx: number[] = [];

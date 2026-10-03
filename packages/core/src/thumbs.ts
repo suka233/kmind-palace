@@ -37,7 +37,7 @@ export class ThumbnailRenderer {
     if (hit) return Promise.resolve(hit);
     return new Promise((resolve) => {
       this.queue.push({ preset, resolve });
-      if (!this.raf) this.raf = requestAnimationFrame(() => this.pump());
+      if (!this.raf) this.raf = window.requestAnimationFrame(() => this.pump());
     });
   }
 
@@ -54,7 +54,7 @@ export class ThumbnailRenderer {
       if (url) this.cache.set(preset.id, url);
       resolve(url);
     }
-    if (this.queue.length) this.raf = requestAnimationFrame(() => this.pump());
+    if (this.queue.length) this.raf = window.requestAnimationFrame(() => this.pump());
   }
 
   private draw(preset: Preset) {
@@ -121,7 +121,7 @@ export class ThumbnailRenderer {
 
   dispose() {
     this.disposed = true;
-    cancelAnimationFrame(this.raf);
+    window.cancelAnimationFrame(this.raf);
     this.queue = [];
     this.rt.dispose();
   }

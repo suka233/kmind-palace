@@ -81,8 +81,8 @@ export class Character {
   }
 
   private build() {
-    const L = this.look, c = L.colors!, sp = L.species as Species;
-    const body = mat(c.body!), belly = mat(c.belly!), accent = mat(c.accent!);
+    const L = this.look, c = L.colors, sp = L.species as Species;
+    const body = mat(c.body), belly = mat(c.belly), accent = mat(c.accent);
     const dark = mat('#2a211c', .5), white = mat('#ffffff', .4);
     const s = this.scale;
     const rig = this.rig = pivot(this.root, [0, 0, 0]);

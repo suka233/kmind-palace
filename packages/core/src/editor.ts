@@ -11,6 +11,7 @@ import { spawnItem, despawnItem, placeItem, roomAt, itemDisplayName, ownBox } fr
 import { ThumbnailRenderer } from './thumbs';
 import { StructEditor } from './struct-editor';
 import { t } from './i18n';
+import { html, rich } from './dom';
 
 export type EditMode = 'items' | 'rooms' | 'walls';
 
@@ -110,7 +111,7 @@ export class Editor {
     const root = this.v.root;
     for (const k of ['items', 'rooms', 'walls']) root.classList.toggle('kp-emode-' + k, k === m);
     root.querySelectorAll('[data-act="emode"]').forEach(b => b.classList.toggle('kp-on', (b as HTMLElement).dataset.mode === m));
-    this.v.ui.editHint.innerHTML = t(HINTS[m]);
+    this.v.ui.editHint.replaceChildren(html`${rich(t(HINTS[m]))}`);
     this.updateRing();
     this.v.applyHighlight();
     this.v.invalidate();
@@ -169,7 +170,7 @@ export class Editor {
     const size = b.bounds.getSize(new THREE.Vector3()), c = b.bounds.getCenter(new THREE.Vector3());
     const span = Math.ceil(Math.max(size.x, size.z) / .5) * .5;
     const grid = this.grid = new THREE.GridHelper(span, Math.round(span / .5), '#9a8a76', '#9a8a76');
-    const m = grid.material as THREE.LineBasicMaterial;
+    const m = grid.material;
     m.transparent = true; m.opacity = .16; m.depthWrite = false;
     grid.position.set(Math.round(c.x * 2) / 2, .004, Math.round(c.z * 2) / 2);
     grid.visible = this.active;
@@ -361,7 +362,7 @@ export class Editor {
       this.v.respawn(item);
     };
     if (live) {
-      if (!this.liveRaf) this.liveRaf = requestAnimationFrame(rebuild);
+      if (!this.liveRaf) this.liveRaf = window.requestAnimationFrame(rebuild);
       return;
     }
     cancelAnimationFrame(this.liveRaf); this.liveRaf = 0;
@@ -672,7 +673,7 @@ export class Editor {
     } else {
       this.follow(e, d.item, d.obj, d);
     }
-    this.v.renderer.domElement.style.cursor = 'grabbing';
+    this.v.setCursor('grabbing');
     this.afterTransform();
     return true;
   }
@@ -692,7 +693,7 @@ export class Editor {
     const d = this.drag;
     if (!d || e.pointerId !== d.pointerId) return false;
     this.drag = null;
-    this.v.renderer.domElement.style.cursor = '';
+    this.v.setCursor('');
     if (d.moved) {
       const p = itemPose(this.v.doc.items, d.item).pos;
       d.item.room = roomAt(this.v.doc, p[0], p[2])?.id ?? d.item.room;
@@ -903,12 +904,12 @@ export class Editor {
     const wall = entry?.mount === 'wall';
     const host = this.v.host;
     if (this.editingBlocks && item.type === 'blocks') {
-      card.innerHTML = `
+      card.replaceChildren(html`
         <button class="kp-close" data-act="closeCard">×</button>
-        <div class="kp-room">${t('积木')} · ${esc(itemDisplayName(item, this.v.catalog))}</div>
+        <div class="kp-room">${t('积木')} · ${itemDisplayName(item, this.v.catalog)}</div>
         <div class="kp-blocks-help">${t('形体：box / cyl / cone / sphere / torus / lathe / extrude / group；单位米，pos 是中心，rot 为度；mirror、repeat 复制；slot + name 的部件可以单独绑定。')}</div>
         <textarea class="kp-blocks-json" data-field="blocks" spellcheck="false"></textarea>
-        <div class="kp-story-tools"><button data-act="blocksCancel">${t('取消')}</button><button class="kp-primary" data-act="blocksSave">${t('保存')}</button></div>`;
+        <div class="kp-story-tools"><button data-act="blocksCancel">${t('取消')}</button><button class="kp-primary" data-act="blocksSave">${t('保存')}</button></div>`);
       (card.querySelector('textarea') as HTMLTextAreaElement).value = JSON.stringify(item.params?.parts || [], null, 1);
       card.classList.remove('kp-hidden');
       return;
@@ -916,27 +917,27 @@ export class Editor {
     this.editingBlocks = false;
     const params = (entry?.params || [])
       .filter(spec => spec.kind === 'docSource' ? !!host.pickDocSource : spec.kind === 'photo' || spec.kind === 'model' ? !!host.saveMedia : true)
-      .map(spec => paramField(spec, item.params?.[spec.key] ?? spec.def)).join('');
+      .map(spec => paramField(spec, item.params?.[spec.key] ?? spec.def));
     const b = getBinding(item);
     const parts = itemLoci(item).filter(l => l.slot).length;
-    card.innerHTML = `
+    card.replaceChildren(html`
       <button class="kp-close" data-act="closeCard">×</button>
-      <div class="kp-room">${esc([room, entry ? t(entry.name) : ''].filter(Boolean).join(' · ').toUpperCase())}</div>
-      <input class="kp-name" data-edit="name" maxlength="40" placeholder="${esc(entry ? t(entry.name) : '')}">
-      ${entry ? '' : `<div class="kp-shelf-src">📦 ${t('「{type}」需要更新版本的插件才能显示，先用纸箱占位，数据不会丢', { type: esc(item.type) })}</div>`}
+      <div class="kp-room">${[room, entry ? t(entry.name) : ''].filter(Boolean).join(' · ').toUpperCase()}</div>
+      <input class="kp-name" data-edit="name" maxlength="40" placeholder="${entry ? t(entry.name) : ''}">
+      ${entry ? '' : html`<div class="kp-shelf-src">📦 ${t('「{type}」需要更新版本的插件才能显示，先用纸箱占位，数据不会丢', { type: item.type })}</div>`}
       <div class="kp-tools">
-        ${wall ? '' : `<button data-act="rotItem" data-deg="-${ANGLE}" title="${t('逆时针 {deg}°（[）', { deg: ANGLE })}">↺ ${ANGLE}°</button>
+        ${wall ? '' : html`<button data-act="rotItem" data-deg="-${ANGLE}" title="${t('逆时针 {deg}°（[）', { deg: ANGLE })}">↺ ${ANGLE}°</button>
         <button data-act="rotItem" data-deg="${ANGLE}" title="${t('顺时针 {deg}°（]）', { deg: ANGLE })}">↻ ${ANGLE}°</button>
         <button data-act="rotItem" data-deg="90" title="${t('旋转 90°（R）')}">↻ 90°</button>`}
         <button data-act="dupItem" title="${t('复制（⌘D / Ctrl+D）')}">${t('复制')}</button>
         <button class="kp-danger" data-act="delItem" title="${t('删除（Delete）')}">${t('删除')}</button>
       </div>
-      ${params ? `<div class="kp-params">${params}</div>` : ''}
+      ${params.length ? html`<div class="kp-params">${params}</div>` : ''}
       <div class="kp-bindline">
-        <span>${b?.blockId ? `📌 <b></b>` : `<i>${t('未绑定笔记')}</i>`}${parts ? ` · ${t('另有 {n} 个部件记忆桩', { n: parts })}` : ''}</span>
-        ${this.v.host.pickBlock ? `<button data-act="bind">${b?.blockId ? t('更换') : t('绑定')}</button>` : ''}
-        ${b?.blockId ? `<button class="kp-danger" data-act="unbind">${t('解绑')}</button>` : ''}
-      </div>`;
+        <span>${b?.blockId ? html`📌 <b></b>` : html`<i>${t('未绑定笔记')}</i>`}${parts ? ` · ${t('另有 {n} 个部件记忆桩', { n: parts })}` : ''}</span>
+        ${this.v.host.pickBlock ? html`<button data-act="bind">${b?.blockId ? t('更换') : t('绑定')}</button>` : ''}
+        ${b?.blockId ? html`<button class="kp-danger" data-act="unbind">${t('解绑')}</button>` : ''}
+      </div>`);
     (card.querySelector('.kp-name') as HTMLInputElement).value = item.name ? t(item.name) : '';
     const bt = card.querySelector('.kp-bindline b');
     if (bt) bt.textContent = b.title || b.blockId;
@@ -953,17 +954,17 @@ export class Editor {
     if (!this.thumbs) this.thumbs = new ThumbnailRenderer(this.v.renderer, this.v.kit, this.v.catalog, this.v.scene.environment);
     const d = this.v.ui.drawer;
     const presets = PRESETS.filter(p => p.category === this.category && this.v.catalog[p.type]);
-    d.innerHTML = `
+    d.replaceChildren(html`
       <div class="kp-drawer-head"><b>${t('添加物件')}</b>
-        ${this.v.host.ai?.visionEnabled?.() ? `<button class="kp-drawer-tool" data-act="recognize"${this.busy ? ' disabled' : ''} title="${t('拍一张家具或物品的照片，让模型把它变成宫殿里的物件')}">📷 ${t('拍照识物')}</button>` : ''}
-        ${this.v.host.saveMedia ? `<button class="kp-drawer-tool" data-act="importModel"${this.busy ? ' disabled' : ''} title="${t('导入 .glb 格式的 3D 模型')}">${t('导入 .glb')}</button>` : ''}
+        ${this.v.host.ai?.visionEnabled?.() ? html`<button class="kp-drawer-tool" data-act="recognize"${this.busy ? ' disabled' : ''} title="${t('拍一张家具或物品的照片，让模型把它变成宫殿里的物件')}">📷 ${t('拍照识物')}</button>` : ''}
+        ${this.v.host.saveMedia ? html`<button class="kp-drawer-tool" data-act="importModel"${this.busy ? ' disabled' : ''} title="${t('导入 .glb 格式的 3D 模型')}">${t('导入 .glb')}</button>` : ''}
         <button class="kp-close" data-act="closeDrawer">×</button></div>
-      ${this.busy ? `<div class="kp-drawer-status">${esc(this.busy)}</div>` : ''}
-      <div class="kp-chips">${CATEGORIES.map(c => `<button class="kp-chip${c === this.category ? ' kp-on' : ''}" data-act="cat" data-cat="${esc(c)}">${esc(t(c))}</button>`).join('')}</div>
-      <div class="kp-tiles">${presets.map(p => `
-        <button class="kp-tile" data-act="place" data-preset="${esc(p.id)}" title="${esc(t(p.name))}">
-          <span class="kp-thumb"><img alt="" data-thumb="${esc(p.id)}"></span><span class="kp-tile-name">${esc(t(p.name))}</span>
-        </button>`).join('')}</div>`;
+      ${this.busy ? html`<div class="kp-drawer-status">${this.busy}</div>` : ''}
+      <div class="kp-chips">${CATEGORIES.map(c => html`<button class="kp-chip${c === this.category ? ' kp-on' : ''}" data-act="cat" data-cat="${c}">${t(c)}</button>`)}</div>
+      <div class="kp-tiles">${presets.map(p => html`
+        <button class="kp-tile" data-act="place" data-preset="${p.id}" title="${t(p.name)}">
+          <span class="kp-thumb"><img alt="" data-thumb="${p.id}"></span><span class="kp-tile-name">${t(p.name)}</span>
+        </button>`)}</div>`);
     for (const p of presets) {
       void this.thumbs.get(p).then(url => {
         const img = d.querySelector<HTMLImageElement>(`img[data-thumb="${CSS.escape(p.id)}"]`);
@@ -975,31 +976,33 @@ export class Editor {
 
 function paramField(spec: ParamSpec, value: any) {
   if (spec.kind === 'docSource') {
-    return `<div class="kp-field kp-field-src"><span>${esc(t(spec.label))}</span><div class="kp-src"><b>${value ? '📚 ' + esc(value.name || t('笔记本')) : t('随机的书')}</b>
-      <button data-act="pickSource">${value ? t('更换') : t('摆上笔记本…')}</button>${value ? `<button data-act="clearSource" title="${t('换回随机的书')}">${t('随机')}</button>` : ''}</div></div>
+    return html`<div class="kp-field kp-field-src"><span>${t(spec.label)}</span><div class="kp-src"><b>${value ? '📚 ' + (value.name || t('笔记本')) : t('随机的书')}</b>
+      <button data-act="pickSource">${value ? t('更换') : t('摆上笔记本…')}</button>${value ? html`<button data-act="clearSource" title="${t('换回随机的书')}">${t('随机')}</button>` : ''}</div></div>
       <div class="kp-field kp-field-src"><span>${t('单本')}</span><div class="kp-src"><b>${t('颜色、靠、抽出、空格')}</b><button data-act="shelfEdit">${t('逐本调整…')}</button></div></div>`;
   }
   if (spec.kind === 'blocks') {
     const n = countParts(sanitizeParts(value).parts);
-    return `<div class="kp-field kp-field-src"><span>${esc(t(spec.label))}</span><div class="kp-src"><b>🧱 ${t('{n} 个形体', { n })}</b><button data-act="editBlocks">${t('编辑 JSON')}</button></div></div>`;
+    return html`<div class="kp-field kp-field-src"><span>${t(spec.label)}</span><div class="kp-src"><b>🧱 ${t('{n} 个形体', { n })}</b><button data-act="editBlocks">${t('编辑 JSON')}</button></div></div>`;
   }
   if (spec.kind === 'model') {
-    return `<div class="kp-field kp-field-src"><span>${esc(t(spec.label))}</span><div class="kp-src"><b>📦 ${t('glb 模型')}</b><button data-act="replaceModel">${t('更换')}</button></div></div>`;
+    return html`<div class="kp-field kp-field-src"><span>${t(spec.label)}</span><div class="kp-src"><b>📦 ${t('glb 模型')}</b><button data-act="replaceModel">${t('更换')}</button></div></div>`;
   }
   if (spec.kind === 'photo') {
-    return `<div class="kp-field kp-field-src"><span>${esc(t(spec.label))}</span><div class="kp-src"><b>${value ? '🖼 ' + t('自己的照片') : t('（没有）')}</b>
-      <button data-act="pickPhoto">${value ? t('更换') : t('选照片…')}</button>${value ? `<button data-act="clearPhoto">${t('移除')}</button>` : ''}</div></div>`;
+    return html`<div class="kp-field kp-field-src"><span>${t(spec.label)}</span><div class="kp-src"><b>${value ? '🖼 ' + t('自己的照片') : t('（没有）')}</b>
+      <button data-act="pickPhoto">${value ? t('更换') : t('选照片…')}</button>${value ? html`<button data-act="clearPhoto">${t('移除')}</button>` : ''}</div></div>`;
   }
   if (spec.options) {
     const custom = spec.customColor && isHexColor(value);
     const idx = custom ? -1 : Math.max(0, spec.options.findIndex(([v]) => v === value));
-    const opts = spec.options.map(([, label], i) => `<option value="${i}"${i === idx ? ' selected' : ''}>${esc(t(label))}</option>`).join('')
-      + (spec.customColor ? `<option value="custom"${custom ? ' selected' : ''}>${t('自定义颜色…')}</option>` : '');
-    const picker = custom ? `<input type="color" class="kp-color" data-param-color="${esc(spec.key)}" value="${esc(value)}">` : '';
-    return `<label class="kp-field${custom ? ' kp-field-color' : ''}"><span>${esc(t(spec.label))}</span><select data-param="${esc(spec.key)}">${opts}</select>${picker}</label>`;
+    const opts = [
+      ...spec.options.map(([, label], i) => html`<option value="${i}"${i === idx ? ' selected' : ''}>${t(label)}</option>`),
+      spec.customColor ? html`<option value="custom"${custom ? ' selected' : ''}>${t('自定义颜色…')}</option>` : null,
+    ];
+    const picker = custom ? html`<input type="color" class="kp-color" data-param-color="${spec.key}" value="${value}">` : null;
+    return html`<label class="kp-field${custom ? ' kp-field-color' : ''}"><span>${t(spec.label)}</span><select data-param="${spec.key}">${opts}</select>${picker}</label>`;
   }
   const v = Number(value ?? spec.def ?? 0);
-  return `<label class="kp-field"><span>${esc(t(spec.label))}</span><input type="range" data-param="${esc(spec.key)}" min="${spec.min}" max="${spec.max}" step="${spec.step}" value="${v}"><output>${fmt(v, spec)}</output></label>`;
+  return html`<label class="kp-field"><span>${t(spec.label)}</span><input type="range" data-param="${spec.key}" min="${spec.min}" max="${spec.max}" step="${spec.step}" value="${v}"><output>${fmt(v, spec)}</output></label>`;
 }
 
 function fmt(v: number, spec: ParamSpec) {
@@ -1031,10 +1034,6 @@ function isOverlay(o: THREE.Object3D) {
 function itemOf(o: THREE.Object3D): PalaceItem | null {
   for (let p: THREE.Object3D | null = o; p; p = p.parent) if (p.userData.item) return p.userData.item as PalaceItem;
   return null;
-}
-
-function esc(s: string) {
-  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 /** 捕获指针；合成事件或指针已抬起时 setPointerCapture 会抛错，忽略即可 */

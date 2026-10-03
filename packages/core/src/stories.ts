@@ -4,6 +4,7 @@ import { storyMessages, cleanStory, imagePrompt, type StoryContext } from './sto
 import { resolveRoute } from './route';
 import { compressImage, storeMedia } from './media';
 import { t } from './i18n';
+import { html } from './dom';
 
 /* =====================================================================
  * 记忆故事：卡片里的「记忆故事」一节 + 生成 / 配图 / 写回笔记
@@ -20,34 +21,34 @@ export class StoryController {
   constructor(private v: PalaceView) { }
 
   /** 卡片里的「记忆故事」一节（只在已绑定的记忆桩上显示） */
-  section(item: PalaceItem, slot: string, b: LocusBinding): string {
+  section(item: PalaceItem, slot: string, b: LocusBinding): DocumentFragment {
     const host = this.v.host, key = locusKey(item.id, slot), busy = this.busy.get(key);
     const canAi = !!host.ai;
     const canImg = !!host.ai?.image && (host.ai.imageEnabled?.() ?? true) && !!host.saveMedia;
     if (this.editing === key) {
-      return `<div class="kp-story kp-story-editing">
+      return html`<div class="kp-story kp-story-editing">
         <div class="kp-story-head"><b>${t('记忆故事')}</b></div>
         <textarea class="kp-story-input" data-field="story" rows="5" maxlength="400" placeholder="${t('把笔记内容想象成发生在这里的一个画面：物件在做什么？有什么声音、气味？')}"></textarea>
         <div class="kp-story-tools"><button data-act="storyCancel">${t('取消')}</button><button class="kp-primary" data-act="storySave">${t('保存')}</button></div>
       </div>`;
     }
-    const dis = busy ? ' disabled' : '';
-    const tools: string[] = [];
-    if (canAi) tools.push(`<button data-act="storyAi"${dis}>${busy === 'story' ? t('正在编…') : b.story ? t('✨ 换一个') : t('✨ AI 编一个')}</button>`);
-    tools.push(`<button data-act="storyEdit"${dis}>${b.story ? t('改') : t('自己写')}</button>`);
-    if (b.story && canImg) tools.push(`<button data-act="storyImage"${dis}>${busy === 'image' ? t('正在画…') : b.image ? t('重画') : t('🎨 配图')}</button>`);
-    if (b.story && host.writeStory && this.v.isLocalNote(b)) tools.push(`<button data-act="storyWrite"${dis} title="${t('在笔记里这个块的下面插一段引述')}">${busy === 'write' ? t('写入中…') : t('写回笔记')}</button>`);
-    if (b.story || b.image) tools.push(`<button class="kp-danger" data-act="storyClear"${dis}>${this.confirmClear === key ? t('确认删除') : t('删除')}</button>`);
+    const dis = busy ? 'disabled' : '';
+    const tools: DocumentFragment[] = [];
+    if (canAi) tools.push(html`<button data-act="storyAi" ${dis}>${busy === 'story' ? t('正在编…') : b.story ? t('✨ 换一个') : t('✨ AI 编一个')}</button>`);
+    tools.push(html`<button data-act="storyEdit" ${dis}>${b.story ? t('改') : t('自己写')}</button>`);
+    if (b.story && canImg) tools.push(html`<button data-act="storyImage" ${dis}>${busy === 'image' ? t('正在画…') : b.image ? t('重画') : t('🎨 配图')}</button>`);
+    if (b.story && host.writeStory && this.v.isLocalNote(b)) tools.push(html`<button data-act="storyWrite" ${dis} title="${t('在笔记里这个块的下面插一段引述')}">${busy === 'write' ? t('写入中…') : t('写回笔记')}</button>`);
+    if (b.story || b.image) tools.push(html`<button class="kp-danger" data-act="storyClear" ${dis}>${this.confirmClear === key ? t('确认删除') : t('删除')}</button>`);
     const empty = busy === 'story' ? t('正在把笔记变成这个位置上的一个画面…') : t('把笔记内容想象成发生在这里的一个夸张小场景，会记得更牢。');
-    return `<div class="kp-story">
+    return html`<div class="kp-story">
       <div class="kp-story-head"><b>${t('记忆故事')}</b></div>
-      ${b.story ? '<p class="kp-story-text"></p>' : `<p class="kp-story-empty">${empty}</p>`}
-      ${b.image ? '<img class="kp-story-img" alt="">' : busy === 'image' ? `<div class="kp-story-img kp-story-wait">${t('正在画…')}</div>` : ''}
-      <div class="kp-story-tools">${tools.join('')}</div>
+      ${b.story ? html`<p class="kp-story-text"></p>` : html`<p class="kp-story-empty">${empty}</p>`}
+      ${b.image ? html`<img class="kp-story-img" alt="">` : busy === 'image' ? html`<div class="kp-story-img kp-story-wait">${t('正在画…')}</div>` : ''}
+      <div class="kp-story-tools">${tools}</div>
     </div>`;
   }
 
-  /** 卡片 innerHTML 之后：填文字（不拼进 HTML）、加载配图、绑定输入框的快捷键 */
+  /** 卡片渲染之后：填文字（故事正文不放进模板）、加载配图、绑定输入框的快捷键 */
   hydrate(root: HTMLElement, b: LocusBinding) {
     const txt = root.querySelector('.kp-story-text');
     if (txt) txt.textContent = b.story;
@@ -62,7 +63,7 @@ export class StoryController {
         if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); this.onAction('storySave'); }
         else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.onAction('storyCancel'); }
       });
-      setTimeout(() => { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }, 0);
+      window.setTimeout(() => { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }, 0);
     }
   }
 
@@ -121,7 +122,7 @@ export class StoryController {
   }
 
   private fail(what: string, e: unknown) {
-    const msg = String((e as Error)?.message || e);
+    const msg = e instanceof Error ? e.message : typeof e === 'string' ? e : JSON.stringify(e);
     const hint = this.v.host.openSettings ? t('（可以在插件设置里配置大模型）') : '';
     this.v.host.notify?.(t('{what}：{msg}', { what, msg }) + hint, 'error');
   }

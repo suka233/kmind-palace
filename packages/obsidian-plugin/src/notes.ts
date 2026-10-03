@@ -68,7 +68,7 @@ class FileSuggest extends FuzzySuggestModal<TFile> {
   getItems() { return this.app.vault.getMarkdownFiles().sort((a, b) => b.stat.mtime - a.stat.mtime); }
   getItemText(f: TFile) { return f.path.replace(/\.md$/, ''); }
   onChooseItem(f: TFile) { this.done(f); }
-  onClose() { setTimeout(() => this.done(null), 0); }
+  onClose() { window.setTimeout(() => this.done(null), 0); }
 }
 
 type PartChoice = { kind: 'd' } | { kind: 'h'; heading: string; level: number } | ({ kind: 'b' } & BlockChoice);
@@ -91,7 +91,7 @@ class PartSuggest extends SuggestModal<PartChoice> {
     if (p.kind === 'b') { const kind = ({ paragraph: '段落', list: '列表项', blockquote: '引述', callout: '标注', table: '表格', code: '代码' } as Record<string, string>)[p.type]; el.createEl('small', { text: kind ? t(kind) : p.type }); }
   }
   onChooseSuggestion(p: PartChoice) { this.done(p); }
-  onClose() { setTimeout(() => this.done(null), 0); }
+  onClose() { window.setTimeout(() => this.done(null), 0); }
 }
 
 /** 一篇笔记里能绑定的部分：整篇、各个标题、各段（列表按列表项） */
@@ -194,7 +194,7 @@ class FolderSuggest extends FuzzySuggestModal<TFolder> {
   getItems() { return this.app.vault.getAllFolders(true); }
   getItemText(f: TFolder) { return f.isRoot() ? t('/（整个库的根目录）') : f.path; }
   onChooseItem(f: TFolder) { this.done(f); }
-  onClose() { setTimeout(() => this.done(null), 0); }
+  onClose() { window.setTimeout(() => this.done(null), 0); }
 }
 
 export async function pickDocSource(app: App): Promise<DocSource | null> {

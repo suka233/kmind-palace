@@ -2,10 +2,10 @@
   "name": "kmind-palace",
   "author": "suka",
   "url": "https://github.com/suka233/kmind-palace",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "minAppVersion": "3.8.5",
-  "backends": ["windows", "linux", "darwin", "ios", "android", "harmony", "docker", "all"],
-  "frontends": ["desktop", "mobile", "browser-desktop", "browser-mobile", "desktop-window", "all"],
+  "backends": ["all"],
+  "frontends": ["all"],
   "displayName": {
     "default": "KMind Palace",
     "zh-CN": "思维宫殿"

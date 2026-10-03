@@ -40,7 +40,7 @@ export class PalaceStore {
   /** 世界文件读不了（更新版本的插件写的）：先用一个临时世界，不写回，免得覆盖掉 */
   private worldLocked = false;
   private cache = new Map<string, PalaceDoc>();
-  private timers = new Map<string, ReturnType<typeof setTimeout>>();
+  private timers = new Map<string, number>();
   private pending = new Map<string, () => Promise<void>>();
 
   constructor(private storage: StorageAdapter, private onError: (msg: string) => void) { }
@@ -113,7 +113,7 @@ export class PalaceStore {
   /** 删除一座宫殿的数据文件 */
   async remove(id: string) {
     const key = 'doc:' + id;
-    clearTimeout(this.timers.get(key));
+    window.clearTimeout(this.timers.get(key));
     this.timers.delete(key);
     this.pending.delete(key);
     this.cache.delete(id);
@@ -138,7 +138,7 @@ export class PalaceStore {
   async flush() {
     const jobs = [...this.pending.entries()];
     this.pending.clear();
-    this.timers.forEach(t => clearTimeout(t));
+    this.timers.forEach(t => window.clearTimeout(t));
     this.timers.clear();
     await Promise.all(jobs.map(([, fn]) => fn()));
   }
@@ -155,8 +155,8 @@ export class PalaceStore {
 
   private schedule(key: string, fn: () => Promise<void>) {
     this.pending.set(key, fn);
-    clearTimeout(this.timers.get(key));
-    this.timers.set(key, setTimeout(() => {
+    window.clearTimeout(this.timers.get(key));
+    this.timers.set(key, window.setTimeout(() => {
       this.timers.delete(key);
       const job = this.pending.get(key);
       this.pending.delete(key);

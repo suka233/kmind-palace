@@ -8,6 +8,7 @@ import { ownBox } from './build';
 import { frontDoor, PET_NAME, type PalaceWorld } from './world';
 import { boundLoci } from './schema';
 import { escapeHtml } from './icons';
+import { html, rich } from './dom';
 import { t } from './i18n';
 import type { GuestPet, PetTrip } from '@kmind-palace/protocol';
 
@@ -59,7 +60,7 @@ export class Companion {
   private guests: { g: GuestPet; ch: Character; bubble: CSS2DObject; label: CSS2DObject; path: P2[]; idleFor: number; nextIdle: number; bubbleUntil: number }[] = [];
 
   constructor(private v: PalaceView) {
-    v.root.insertAdjacentHTML('beforeend', `<div class="kp-routes kp-pet-panel kp-glass kp-hidden kp-palace-only" data-ref="petPanel"></div>`);
+    v.root.append(html`<div class="kp-routes kp-pet-panel kp-glass kp-hidden kp-palace-only" data-ref="petPanel"></div>`);
     v.ui.petPanel = v.root.querySelector('[data-ref="petPanel"]') as HTMLElement;
   }
 
@@ -112,11 +113,11 @@ export class Companion {
     this.idleFor = 0;
     this.nextIdle = 5 + Math.random() * 4;
     if (!v.readonly && v.guide?.consume('pet')) {
-      this.say(t('你好！我是小管家 <b>{name}</b>，以后我帮你看家、陪你复习。点我可以给我换装哦～', { name: escapeHtml(this.petName) }), 7000);
+      this.say(html`${rich(t('你好！我是小管家 <b>{name}</b>，以后我帮你看家、陪你复习。点我可以给我换装哦～', { name: escapeHtml(this.petName) }))}`, 7000);
     } else if (!v.readonly) {
       const due = v.dueCount(doc);
-      this.say(due ? t('欢迎回来！今天有 {n} 个记忆桩该复习了。', { n: due }) : t('欢迎回来，{name} 一切都好。', { name: escapeHtml(doc.name) }), 4200);
-    } else if (v.visiting) this.say(t('哇，这是 {name} 的宫殿！', { name: escapeHtml(v.visiting.owner.name) }), 3600);
+      this.say(html`${due ? t('欢迎回来！今天有 {n} 个记忆桩该复习了。', { n: due }) : t('欢迎回来，{name} 一切都好。', { name: doc.name })}`, 4200);
+    } else if (v.visiting) this.say(html`${t('哇，这是 {name} 的宫殿！', { name: v.visiting.owner.name })}`, 3600);
     v.invalidate(2);
   }
 
@@ -196,19 +197,19 @@ export class Companion {
     this.walkTo(p[0], p[1], toCam + angleDiff(toCam, toItem) * .35);
   }
 
-  /** 回忆打分 / 走完：给个反应 */
+  /** 回忆打分 / 走完：给个反应（text 是纯文字） */
   cheer(text?: string) {
     if (!this.ch) return;
     this.ch.play('hop');
-    if (text) this.say(text, 3000);
+    if (text) this.say(html`${text}`, 3000);
     this.v.invalidate(2);
   }
 
   /** 头顶冒一句话 */
-  say(html: string, ms = 3000) {
+  say(content: DocumentFragment, ms = 3000) {
     if (!this.bubble) return;
     const el = this.bubble.element;
-    el.innerHTML = html;
+    el.replaceChildren(content);
     el.classList.remove('kp-hidden');
     this.bubbleUntil = this.time + ms / 1000;
     this.v.invalidate(2);
@@ -242,7 +243,7 @@ export class Companion {
     if (due) tip = t('有 {n} 个记忆桩该复习了，点左上角「回忆」我带你走一遍。', { n: due });
     else if (!bound && !v.readonly) tip = t('这座宫殿还没有记忆桩：选中一件家具，绑一条笔记试试？');
     else tip = t(TIPS[Math.floor(Math.random() * TIPS.length)]);
-    this.say(t('<b>{name}</b>：{tip}', { name: escapeHtml(this.petName), tip }), 5200);
+    this.say(html`${rich(t('<b>{name}</b>：{tip}', { name: escapeHtml(this.petName), tip: escapeHtml(tip) }))}`, 5200);
     this.togglePanel(true);
   }
 
@@ -306,7 +307,7 @@ export class Companion {
 
   /** 第一人称：跟在身后一米左右 */
   private follow(dt: number): boolean {
-    const ch = this.ch!, v = this.v;
+    const ch = this.ch, v = this.v;
     this.followCheck -= dt;
     if (this.followCheck > 0) return false;
     this.followCheck = .4;
@@ -353,7 +354,7 @@ export class Companion {
     const v = this.v, ch = this.ch, doc = v.doc;
     if (!ch || !doc || v.visiting) { this.render(); return; }
     const door = frontDoor(doc);
-    this.say(t('出门玩啦，回来给你带礼物～'), 2500);
+    this.say(html`${t('出门玩啦，回来给你带礼物～')}`, 2500);
     if (!door) { this.remove(); v.invalidate(2); this.render(); return; }
     this.leaving = true;
     this.walkTo(door.x + door.nx * .3, door.z + door.nz * .3);
@@ -369,7 +370,7 @@ export class Companion {
       const s = back.souvenir;
       const what = s?.title || (s?.place ? v.social?.placeName(s.place) : '');
       const went = t('我回来啦！去了 <b>{host}</b> 家', { host: escapeHtml(back.host.name) });
-      this.say(what ? went + t('，带回了「{what}」', { what: escapeHtml(what) }) : went, 6000);
+      this.say(html`${rich(what ? went + t('，带回了「{what}」', { what: escapeHtml(what) }) : went)}`, 6000);
     }
     this.render();
   }
@@ -382,7 +383,7 @@ export class Companion {
     if (!b || !list.length) return;
     const g = this.walkGrid();
     for (const guest of list.slice(0, 6)) {
-      const ch = new Character(guest.look as Look, SCALE * .9);
+      const ch = new Character(guest.look, SCALE * .9);
       const labelEl = document.createElement('div');
       labelEl.className = 'kp-peer-name';
       labelEl.textContent = t('{owner}的{pet}', { owner: guest.owner.name, pet: petDisplayName(guest.name) });
@@ -414,7 +415,7 @@ export class Companion {
     for (const x of this.guests) {
       if (!rc.intersectObject(x.ch.root, true).length) continue;
       const mins = Math.max(1, Math.round((Date.parse(x.g.returnsAt) - Date.now()) / 60e3));
-      x.bubble.element.innerHTML = t('我是 <b>{owner}</b> 家的{pet}，来玩一会儿～（{n} 分钟后回家）', { owner: escapeHtml(x.g.owner.name), pet: escapeHtml(petDisplayName(x.g.name)), n: mins });
+      x.bubble.element.replaceChildren(html`${rich(t('我是 <b>{owner}</b> 家的{pet}，来玩一会儿～（{n} 分钟后回家）', { owner: escapeHtml(x.g.owner.name), pet: escapeHtml(petDisplayName(x.g.name)), n: mins }))}`);
       x.bubble.element.classList.remove('kp-hidden');
       x.bubbleUntil = this.time + 4;
       x.ch.play('wave');
@@ -477,31 +478,31 @@ export class Companion {
     if (!this.panelOpen) return;
     const el = this.v.ui.petPanel, pet = this.pet, look = cleanLook(pet.look);
     const locked = !!this.v.visiting || this.v.readonly;
-    const head = `<div class="kp-routes-head"><b>${t('小管家')}</b><button class="kp-close" data-act="petClose">×</button></div>`;
+    const head = html`<div class="kp-routes-head"><b>${t('小管家')}</b><button class="kp-close" data-act="petClose">×</button></div>`;
     if (locked) {
-      el.innerHTML = `${head}<div class="kp-pet-hero"><img src="${this.thumb(look)}" alt=""><div><b>${escapeHtml(this.petName)}</b><small>${t('陪你一起来串门')}</small></div></div>
-        <div class="kp-route-stats">${t('回到自己的世界后可以给它换装。')}</div>`;
+      el.replaceChildren(html`${head}<div class="kp-pet-hero"><img src="${this.thumb(look)}" alt=""><div><b>${this.petName}</b><small>${t('陪你一起来串门')}</small></div></div>
+        <div class="kp-route-stats">${t('回到自己的世界后可以给它换装。')}</div>`);
       return;
     }
-    const colors = look.colors!;
-    const sp = SPECIES.find(s => s.id === look.species)!;
-    const swatch = (field: 'body' | 'accent', list: string[]) => [...new Set(list.map(c => c.toLowerCase()))].map(c => `<button class="kp-pet-sw${colors[field] === c ? ' kp-on' : ''}" style="background:${c}" data-act="petColor" data-field="${field}" data-color="${c}" title="${c}"></button>`).join('');
-    el.innerHTML = `${head}
+    const colors = look.colors;
+    const sp = SPECIES.find(s => s.id === look.species);
+    const swatch = (field: 'body' | 'accent', list: string[]) => [...new Set(list.map(c => c.toLowerCase()))].map(c => html`<button class="kp-pet-sw${colors[field] === c ? ' kp-on' : ''}" style="background:${c}" data-act="petColor" data-field="${field}" data-color="${c}" title="${c}"></button>`);
+    el.replaceChildren(html`${head}
       <div class="kp-pet-hero"><img src="${this.thumb(look)}" alt="">
-        <div><input class="kp-route-name" data-field="petName" maxlength="20" spellcheck="false" value="${escapeHtml(this.petName)}"><small>${escapeHtml(t(sp.name))}${look.accessories?.length ? ' · ' + look.accessories.map(a => t(ACCESSORIES.find(x => x.id === a)?.name)).join(t('、')) : ''}</small></div></div>
+        <div><input class="kp-route-name" data-field="petName" maxlength="20" spellcheck="false" value="${this.petName}"><small>${t(sp.name)}${look.accessories?.length ? ' · ' + look.accessories.map(a => t(ACCESSORIES.find(x => x.id === a)?.name)).join(t('、')) : ''}</small></div></div>
       <div class="kp-route-sub">${t('物种')}</div>
       <div class="kp-pet-species">${SPECIES.map(s => {
         const l = cleanLook({ species: s.id, accessories: look.accessories });
-        return `<button class="${s.id === look.species ? 'kp-on' : ''}" data-act="petSpecies" data-id="${s.id}"><img src="${this.thumb(l)}" alt=""><span>${t(s.name)}</span></button>`;
-      }).join('')}</div>
+        return html`<button class="${s.id === look.species ? 'kp-on' : ''}" data-act="petSpecies" data-id="${s.id}"><img src="${this.thumb(l)}" alt=""><span>${t(s.name)}</span></button>`;
+      })}</div>
       <div class="kp-route-sub">${t('毛色')}</div>
       <div class="kp-pet-swatches">${swatch('body', [sp.colors.body, '#8b6a4f', '#d9682e', '#e3a15c', '#efe9e2', '#5a5550', '#9fb4c7', '#c79bc4'])}</div>
       <div class="kp-route-sub">${t('点缀色')}</div>
       <div class="kp-pet-swatches">${swatch('accent', [sp.colors.accent, '#f0a33c', '#f2a7a0', '#3a2a22', '#4f86c6', '#4f9a78', '#c4453a', '#e8b93c'])}</div>
       <div class="kp-route-sub">${t('配饰（最多 4 件）')}</div>
-      <div class="kp-pet-acc">${ACCESSORIES.map(a => `<button class="${look.accessories?.includes(a.id) ? 'kp-on' : ''}" data-act="petAcc" data-id="${a.id}">${t(a.name)}</button>`).join('')}</div>
-      ${this.v.social?.petSection() || ''}
-      <div class="kp-route-tools"><button data-act="petRandom">${t('随机一身')}</button><button data-act="petHide">${t('先让它休息')}</button></div>`;
+      <div class="kp-pet-acc">${ACCESSORIES.map(a => html`<button class="${look.accessories?.includes(a.id) ? 'kp-on' : ''}" data-act="petAcc" data-id="${a.id}">${t(a.name)}</button>`)}</div>
+      ${this.v.social?.petSection()}
+      <div class="kp-route-tools"><button data-act="petRandom">${t('随机一身')}</button><button data-act="petHide">${t('先让它休息')}</button></div>`);
   }
 
   private save(pet: { name: string; look: Look; hidden?: boolean }) {
@@ -570,7 +571,7 @@ export class Companion {
     if (commit) {
       const name = inp.value.trim().slice(0, 20) || PET_NAME;
       // 输入框里显示的是翻译后的默认名字：没改就不算改名
-      if (name !== this.pet.name && name !== this.petName) { this.save({ ...this.pet, name }); this.say(t('我现在叫 <b>{name}</b> 啦！', { name: escapeHtml(petDisplayName(name)) }), 2500); }
+      if (name !== this.pet.name && name !== this.petName) { this.save({ ...this.pet, name }); this.say(html`${rich(t('我现在叫 <b>{name}</b> 啦！', { name: escapeHtml(petDisplayName(name)) }))}`, 2500); }
     }
     return true;
   }

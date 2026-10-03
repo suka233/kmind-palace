@@ -78,9 +78,9 @@ const isPatched = (m: THREE.Material) => !!(m as any)[MARK];
 export function bendMaterial(m: THREE.Material) {
   if (!m || isPatched(m) || (m as any).isShaderMaterial || m.userData?.noBend) return;
   (m as any)[MARK] = true;
-  const prev = m.onBeforeCompile;
+  const prev = m.onBeforeCompile?.bind(m);
   m.onBeforeCompile = function (shader, renderer) {
-    prev?.call(this, shader, renderer);
+    prev?.(shader, renderer);
     if (shader.vertexShader.includes('kpBend(')) return;
     shader.uniforms.kpBendK = BEND.k;
     shader.uniforms.kpBendPole = BEND.pole;
@@ -90,8 +90,8 @@ export function bendMaterial(m: THREE.Material) {
       .replace('#include <project_vertex>', PROJECT)
       .replace('#include <defaultnormal_vertex>', NORMAL);
   };
-  const prevKey = m.customProgramCacheKey;
-  m.customProgramCacheKey = function () { return prevKey.call(this) + '|kpbend'; };
+  const prevKey = m.customProgramCacheKey.bind(m);
+  m.customProgramCacheKey = function () { return prevKey() + '|kpbend'; };
   m.needsUpdate = true;
 }
 

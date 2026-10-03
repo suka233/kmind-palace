@@ -1,6 +1,6 @@
 import type { CatalogEntry, ParamSpec } from './catalog';
 import { isHexColor, UNKNOWN_TYPE } from './catalog';
-import { sanitizeParts, type PartSpec } from './blocks';
+import { sanitizeParts } from './blocks';
 import type { ChatMessage } from './host';
 import { t } from './i18n';
 
@@ -48,7 +48,7 @@ const BLOCKS_GUIDE = [
   '- 一般 5–40 个形体，最多 300 个',
 ];
 
-const blocksGuide = () => BLOCKS_GUIDE.map(l => (/[^\x00-\x7f]/.test(l) ? t(l) : l)).join('\n');
+const blocksGuide = () => BLOCKS_GUIDE.map(l => (/[\u0080-￿]/.test(l) ? t(l) : l)).join('\n');
 
 export function recognizeMessages(catalog: Record<string, CatalogEntry>, imageUrl: string, hint = ''): ChatMessage[] {
   return [
@@ -124,7 +124,7 @@ export function parseRecognition(raw: unknown, catalog: Record<string, CatalogEn
   if (o.type === 'blocks' || (!o.type && Array.isArray(o.parts))) {
     const r = sanitizeParts(o.parts);
     if (!r.parts.length) throw new Error(t('模型给的积木是空的'));
-    return { type: 'blocks', name: name || t('积木'), params: { parts: r.parts as PartSpec[] }, warnings: r.warnings };
+    return { type: 'blocks', name: name || t('积木'), params: { parts: r.parts }, warnings: r.warnings };
   }
   const entry = catalog[o.type];
   if (!entry || SKIP.has(o.type)) throw new Error(t('目录里没有「{type}」这种物件', { type: String(o.type) }));

@@ -9,6 +9,7 @@ import {
 } from './structure';
 import { despawnItem } from './build';
 import { t } from './i18n';
+import { html } from './dom';
 
 /* =====================================================================
  * 房间 / 墙体 / 门窗编辑（搭建模式的两个子模式）
@@ -112,9 +113,9 @@ export class StructEditor {
     root.querySelectorAll('[data-act="toolRoom"], [data-act="toolWall"]').forEach(b => b.classList.remove('kp-on'));
     if (tool) {
       root.querySelector(`[data-act="${tool === 'room' ? 'toolRoom' : 'toolWall'}"]`)?.classList.add('kp-on');
-      this.v.ui.placeHint.innerHTML = tool === 'room'
-        ? `${t('在地面上拖出一个矩形新建房间')} · <label class="kp-check"><input type="checkbox" data-sedit="autoWalls"${this.autoWalls ? ' checked' : ''}> ${t('同时砌墙')}</label>`
-        : t('单击起点、再单击终点画墙（可以连续画），会自动对齐已有的墙 · 按住 Alt 自由放置');
+      this.v.ui.placeHint.replaceChildren(tool === 'room'
+        ? html`${t('在地面上拖出一个矩形新建房间')} · <label class="kp-check"><input type="checkbox" data-sedit="autoWalls"${this.autoWalls ? ' checked' : ''}> ${t('同时砌墙')}</label>`
+        : t('单击起点、再单击终点画墙（可以连续画），会自动对齐已有的墙 · 按住 Alt 自由放置'));
       this.select(null);
     }
     this.v.invalidate();
@@ -306,7 +307,7 @@ export class StructEditor {
     const start = (d: SDrag, origin?: number) => {
       const before = this.ed.snapshot();
       // 吸附目标取自拖动开始时的结构，拖动过程中不变
-      this.drag = { ...d, before, snapDoc: JSON.parse(before), origin, moved: false, x: e.clientX, y: e.clientY, id: e.pointerId } as any;
+      this.drag = { ...d, before, snapDoc: JSON.parse(before), origin, moved: false, x: e.clientX, y: e.clientY, id: e.pointerId };
       capture(cvs, e.pointerId);
       return true;
     };
@@ -516,7 +517,7 @@ export class StructEditor {
 
   private live() {
     if (this.liveRaf) return;
-    this.liveRaf = requestAnimationFrame(() => {
+    this.liveRaf = window.requestAnimationFrame(() => {
       this.liveRaf = 0;
       computeWallNormals(this.doc);
       this.v.rebuildStructure();
@@ -694,17 +695,17 @@ export class StructEditor {
       if (!r) { card.classList.add('kp-hidden'); return; }
       const w = r.rect[2] - r.rect[0], d = r.rect[3] - r.rect[1];
       const fi = Math.max(0, FLOORS.findIndex(([f]) => (f ?? undefined) === r.floor));
-      card.innerHTML = `
+      card.replaceChildren(html`
         <button class="kp-close" data-act="closeCard">×</button>
         <div class="kp-room">${t('房间')} · ${w.toFixed(1)} × ${d.toFixed(1)} m · ${(w * d).toFixed(1)} m²</div>
         <input class="kp-name" data-sedit="name" maxlength="20">
         <div class="kp-params">
           <label class="kp-field"><span>${t('英文名')}</span><input class="kp-text" data-sedit="en" maxlength="20" placeholder="${t('可选')}"></label>
-          <label class="kp-field"><span>${t('地面')}</span><select data-sedit="floor">${FLOORS.map(([, l], i) => `<option value="${i}"${i === fi ? ' selected' : ''}>${t(l)}</option>`).join('')}</select></label>
+          <label class="kp-field"><span>${t('地面')}</span><select data-sedit="floor">${FLOORS.map(([, l], i) => html`<option value="${i}"${i === fi ? ' selected' : ''}>${t(l)}</option>`)}</select></label>
           <label class="kp-field"><span>${t('室外')}</span><span class="kp-inline"><input type="checkbox" data-sedit="outdoor"${r.outdoor ? ' checked' : ''}> ${t('阳台 / 庭院（漫游时没有天花板）')}</span></label>
         </div>
         <div class="kp-tools" style="margin-top:10px"><button data-act="labelCenter">${t('标签居中')}</button><button class="kp-danger" data-act="sDelete">${t('删除房间')}</button></div>
-        <div class="kp-tip">${t('拖动橙色把手调整大小，边上的墙和相邻房间会一起移动；拖动房间内部可以移动名称标签。')}</div>`;
+        <div class="kp-tip">${t('拖动橙色把手调整大小，边上的墙和相邻房间会一起移动；拖动房间内部可以移动名称标签。')}</div>`);
       (card.querySelector('[data-sedit="name"]') as HTMLInputElement).value = t(r.name);
       (card.querySelector('[data-sedit="en"]') as HTMLInputElement).value = r.en || '';
     } else if (s.kind === 'wall') {
@@ -713,7 +714,7 @@ export class StructEditor {
       const L = wallLine(w), thick = wallThickness(w);
       const cur = facePaint(w, s.side, s.seg[0], s.seg[1]);
       const curKey = cur ? (cur.texture ? 'tex:' + cur.texture : cur.color) : 'none';
-      card.innerHTML = `
+      card.replaceChildren(html`
         <button class="kp-close" data-act="closeCard">×</button>
         <div class="kp-room">${w.normal ? t('外墙') : t('内墙')} · ${t('长 {len} m', { len: (L.hi - L.lo).toFixed(2) })}</div>
         <h3>${t('墙体')}</h3>
@@ -721,33 +722,33 @@ export class StructEditor {
           <label class="kp-field"><span>${t('厚度')}</span><input type="range" data-sedit="thickness" min="0.06" max="0.4" step="0.01" value="${thick}"><output>${Math.round(thick * 100)} cm</output></label>
         </div>
         <div class="kp-subtitle">${t('这一面墙（{len} m）', { len: (s.seg[1] - s.seg[0]).toFixed(2) })}</div>
-        <div class="kp-swatches">${PAINTS.map(([val, label]) => `<button class="kp-swatch${val === curKey ? ' kp-on' : ''}" data-act="facePaint" data-paint="${val}" title="${t(label)}" style="${swatchStyle(val)}"></button>`).join('')}</div>
+        <div class="kp-swatches">${PAINTS.map(([val, label]) => html`<button class="kp-swatch${val === curKey ? ' kp-on' : ''}" data-act="facePaint" data-paint="${val}" title="${t(label)}" style="${swatchStyle(val)}"></button>`)}</div>
         <div class="kp-subtitle">${t('在点击的位置开门窗')}</div>
-        <div class="kp-tools">${KINDS.map(([k, l]) => `<button data-act="addOpening" data-kind="${k}">+ ${t(l)}</button>`).join('')}</div>
+        <div class="kp-tools">${KINDS.map(([k, l]) => html`<button data-act="addOpening" data-kind="${k}">+ ${t(l)}</button>`)}</div>
         <div class="kp-tools" style="margin-top:8px"><button class="kp-danger" data-act="sDelete">${t('删除这面墙')}</button></div>
-        <div class="kp-tip">${t('拖动墙体平移，相连的墙会跟着伸缩、重合的房间边一起移动；拖动两端的圆点改变长度。')}</div>`;
+        <div class="kp-tip">${t('拖动墙体平移，相连的墙会跟着伸缩、重合的房间边一起移动；拖动两端的圆点改变长度。')}</div>`);
     } else {
       const w = this.doc.walls.find(x => x.id === s.wall);
       const o = w?.openings?.[s.index];
       if (!o) { card.classList.add('kp-hidden'); return; }
       const ki = Math.max(0, KINDS.findIndex(([k]) => k === o.kind));
       const width = o.s1 - o.s0, height = o.y1 - o.y0;
-      card.innerHTML = `
+      card.replaceChildren(html`
         <button class="kp-close" data-act="closeCard">×</button>
         <div class="kp-room">${t('门窗')} · ${t('宽 {w} m', { w: width.toFixed(2) })}</div>
         <h3>${t(KINDS[ki][1])}</h3>
         <div class="kp-params">
-          <label class="kp-field"><span>${t('类型')}</span><select data-sedit="kind">${KINDS.map(([, l], i) => `<option value="${i}"${i === ki ? ' selected' : ''}>${t(l)}</option>`).join('')}</select></label>
+          <label class="kp-field"><span>${t('类型')}</span><select data-sedit="kind">${KINDS.map(([, l], i) => html`<option value="${i}"${i === ki ? ' selected' : ''}>${t(l)}</option>`)}</select></label>
           <label class="kp-field"><span>${t('宽度')}</span><input type="range" data-sedit="width" min="0.4" max="4" step="0.05" value="${width}"><output>${width.toFixed(2)} m</output></label>
           <label class="kp-field"><span>${t('高度')}</span><input type="range" data-sedit="height" min="0.3" max="${(this.H - .1).toFixed(2)}" step="0.05" value="${height}"><output>${height.toFixed(2)} m</output></label>
-          ${o.kind === 'window' ? `<label class="kp-field"><span>${t('离地')}</span><input type="range" data-sedit="sill" min="0" max="2" step="0.05" value="${o.y0}"><output>${o.y0.toFixed(2)} m</output></label>` : ''}
+          ${o.kind === 'window' ? html`<label class="kp-field"><span>${t('离地')}</span><input type="range" data-sedit="sill" min="0" max="2" step="0.05" value="${o.y0}"><output>${o.y0.toFixed(2)} m</output></label>` : ''}
         </div>
         <div class="kp-tools" style="margin-top:10px">
-          ${o.kind === 'door' ? `<button data-act="flipSwing">${t('翻转开向')}</button>` : ''}
-          ${o.kind === 'window' || o.kind === 'slide' ? `<button data-act="toggleCurtain">${o.curtain ? t('去掉窗帘') : t('加窗帘')}</button>` : ''}
+          ${o.kind === 'door' ? html`<button data-act="flipSwing">${t('翻转开向')}</button>` : ''}
+          ${o.kind === 'window' || o.kind === 'slide' ? html`<button data-act="toggleCurtain">${o.curtain ? t('去掉窗帘') : t('加窗帘')}</button>` : ''}
           <button class="kp-danger" data-act="sDelete">${t('删除')}</button>
         </div>
-        <div class="kp-tip">${t('拖动门窗可以沿墙移动。')}</div>`;
+        <div class="kp-tip">${t('拖动门窗可以沿墙移动。')}</div>`);
     }
     card.classList.remove('kp-hidden');
   }

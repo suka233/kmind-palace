@@ -1,18 +1,20 @@
 import { PalaceView, setLocale, createHomePalace, createFromTemplate, normalizePalace, normalizeWorld, createWorld, createRegion, findFreeSpot, findRegionSpot, boundLoci, type HostAdapter, type PalaceDoc, type PalaceWorld, type ReviewState, type Rating } from '../src';
 import * as structure from '../src/structure';
+import { html } from '../src/dom';
 import { samplePalaces, L, SAMPLE_NOTES } from './samples';
 import { pickFromList } from './picker';
 
 // Playground：用 localStorage 模拟宿主（世界 + 每座宫殿一份数据），便于脱离思源单独调试 core
 // ?profile=b 用另一套数据（模拟另一个人，测试串门）；?server=http://localhost:8787 连串门服务器
 const QS = new URLSearchParams(location.search);
+const store = window.localStorage;
 const PROFILE = QS.get('profile');
 // ?lang=en 用英文界面（不给时按浏览器语言）
 const LANG = QS.get('lang') || undefined;
 // 演示数据按语言生成，所以在建数据之前就定下语言
 setLocale(LANG ?? navigator.language);
 const P = PROFILE ? `kmind-palace:pg:${PROFILE}:` : 'kmind-palace:pg:';
-if (QS.get('server') !== null) localStorage.setItem('kmind-palace:pg:server', QS.get('server'));
+if (QS.get('server') !== null) store.setItem('kmind-palace:pg:server', QS.get('server'));
 const K = {
   world: P + 'world',
   ids: P + 'ids',
@@ -60,8 +62,8 @@ const FAKE_BLOCKS = L([
 // ---------------- 模拟闪卡：简化的间隔重复（只为 playground 演示） ----------------
 type MockCard = ReviewState & { ivl?: number };
 const DAY = 864e5;
-const loadCards = (): Record<string, MockCard> => { try { return JSON.parse(localStorage.getItem(K.review) || '{}'); } catch { return {}; } };
-const saveCards = (c: Record<string, MockCard>) => localStorage.setItem(K.review, JSON.stringify(c));
+const loadCards = (): Record<string, MockCard> => { try { return JSON.parse(store.getItem(K.review) || '{}'); } catch { return {}; } };
+const saveCards = (c: Record<string, MockCard>) => store.setItem(K.review, JSON.stringify(c));
 
 function mockRate(id: string, r: Rating): MockCard {
   const all = loadCards(), now = Date.now();
@@ -87,23 +89,23 @@ function seedCards(docs: PalaceDoc[]) {
 }
 
 function saveDoc(doc: PalaceDoc) {
-  localStorage.setItem(K.doc(doc.id), JSON.stringify(doc));
-  const ids: string[] = JSON.parse(localStorage.getItem(K.ids) || '[]');
-  if (!ids.includes(doc.id)) localStorage.setItem(K.ids, JSON.stringify([...ids, doc.id]));
+  store.setItem(K.doc(doc.id), JSON.stringify(doc));
+  const ids: string[] = JSON.parse(store.getItem(K.ids) || '[]');
+  if (!ids.includes(doc.id)) store.setItem(K.ids, JSON.stringify([...ids, doc.id]));
 }
 
 function load(): { world?: PalaceWorld; docs: PalaceDoc[]; fresh?: boolean } {
   try {
-    const ids: string[] = JSON.parse(localStorage.getItem(K.ids) || '[]');
+    const ids: string[] = JSON.parse(store.getItem(K.ids) || '[]');
     if (ids.length) {
-      const docs = ids.map(id => localStorage.getItem(K.doc(id))).filter(Boolean).map(s => normalizePalace(JSON.parse(s)));
-      const raw = localStorage.getItem(K.world);
+      const docs = ids.map(id => store.getItem(K.doc(id))).filter(Boolean).map(s => normalizePalace(JSON.parse(s)));
+      const raw = store.getItem(K.world);
       return { world: raw ? normalizeWorld(JSON.parse(raw)) : undefined, docs };
     }
   } catch (e) { console.warn(e); }
   // 第一次打开：旧版 playground 的单座宫殿（如果有）+ 几座演示宫殿
   let home: PalaceDoc;
-  try { const raw = PROFILE ? null : localStorage.getItem(K.legacy); home = raw ? normalizePalace(JSON.parse(raw)) : createHomePalace(); } catch { home = createHomePalace(); }
+  try { const raw = PROFILE ? null : store.getItem(K.legacy); home = raw ? normalizePalace(JSON.parse(raw)) : createHomePalace(); } catch { home = createHomePalace(); }
   home.color ??= '#c46d4d';
   const [roots, rust, apt, history] = samplePalaces();
   const sky = Object.assign(createFromTemplate('twoRooms', L('云端书屋', 'Cloud Library')), { color: '#4f7f8a' });
@@ -131,6 +133,7 @@ function load(): { world?: PalaceWorld; docs: PalaceDoc[]; fresh?: boolean } {
 }
 
 const host: HostAdapter = {
+  prefs: { get: (k) => store.getItem(k), set: (k, v) => store.setItem(k, v) },
   async pickBlock({ itemName } = {}) {
     // 模拟宿主的块选择器（思源 / Obsidian 里是它们自己的搜索框）
     const b = await pickFromList({
@@ -146,11 +149,11 @@ const host: HostAdapter = {
     return FAKE_BLOCKS.find(b => b.id === id) || doc || (id.endsWith('fake') && !/^20260930(3\d{5})-/.test(id) ? { id, title: '' } : null);
   },
   onDocChange: saveDoc,
-  onWorldChange(world) { localStorage.setItem(K.world, JSON.stringify(world)); },
+  onWorldChange(world) { store.setItem(K.world, JSON.stringify(world)); },
   onDocDelete(id) {
-    localStorage.removeItem(K.doc(id));
-    const ids: string[] = JSON.parse(localStorage.getItem(K.ids) || '[]');
-    localStorage.setItem(K.ids, JSON.stringify(ids.filter(x => x !== id)));
+    store.removeItem(K.doc(id));
+    const ids: string[] = JSON.parse(store.getItem(K.ids) || '[]');
+    store.setItem(K.ids, JSON.stringify(ids.filter(x => x !== id)));
   },
   onLocationChange(id, name) { document.title = `${name} · ${L('思维宫殿', 'KMind Palace')}`; void id; },
   notify(msg) { console.info('[notify]', msg); },
@@ -175,22 +178,22 @@ const host: HostAdapter = {
   watchDocs(cb) { docWatchers.add(cb); return () => docWatchers.delete(cb); },
   async saveMedia(blob, id) {
     const url = await new Promise<string>((r) => { const fr = new FileReader(); fr.onload = () => r(String(fr.result)); fr.readAsDataURL(blob); });
-    localStorage.setItem('kmind-palace:pg:media:' + id, url);
+    store.setItem('kmind-palace:pg:media:' + id, url);
   },
   async loadMedia(id) {
-    const url = localStorage.getItem('kmind-palace:pg:media:' + id);
+    const url = store.getItem('kmind-palace:pg:media:' + id);
     if (!url) throw new Error(L('照片不存在', 'Photo not found'));
     return url;
   },
   social: {
-    serverUrl: () => localStorage.getItem('kmind-palace:pg:server') || '',
-    loadAccount: async () => { try { return JSON.parse(localStorage.getItem(K.account) || 'null'); } catch { return null; } },
-    saveAccount: async (a) => { if (a) localStorage.setItem(K.account, JSON.stringify(a)); else localStorage.removeItem(K.account); },
+    serverUrl: () => store.getItem('kmind-palace:pg:server') || '',
+    loadAccount: async () => { try { return JSON.parse(store.getItem(K.account) || 'null'); } catch { return null; } },
+    saveAccount: async (a) => { if (a) store.setItem(K.account, JSON.stringify(a)); else store.removeItem(K.account); },
   },
   // 模拟大模型：不联网，按提示词里的位置和标题拼一段故事；配图用画布画
   ai: {
     async chat(messages) {
-      await new Promise(r => setTimeout(r, 700));
+      await new Promise(r => window.setTimeout(r, 700));
       const last = messages[messages.length - 1].content;
       // 模拟识图：横图 → 按平均颜色给一张沙发；竖图 → 用积木拼一个小书柜
       if (Array.isArray(last)) {
@@ -221,7 +224,7 @@ const host: HostAdapter = {
     },
     imageEnabled: () => true,
     async image(prompt) {
-      await new Promise(r => setTimeout(r, 900));
+      await new Promise(r => window.setTimeout(r, 900));
       const c = document.createElement('canvas');
       c.width = c.height = 768;
       const g = c.getContext('2d');
@@ -247,20 +250,19 @@ const host: HostAdapter = {
   renderBlock(el, id) {
     // 宿主把真实的块渲染进来；playground 显示演示笔记的标题和正文
     const b = FAKE_BLOCKS.find(x => x.id === id) || SAMPLE_NOTES.get(id);
-    const esc = (x: string) => x.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-    el.innerHTML = `<div style="padding:8px 12px;line-height:1.7"><p style="margin:0 0 6px"><b>${esc(b?.title || L('示例笔记', 'Sample note'))}</b></p><p style="margin:0">${esc(b?.body || L('这里显示笔记的内容。', 'The note content shows up here.'))}</p></div>`;
-    return () => { el.innerHTML = ''; };
+    el.replaceChildren(html`<div style="padding:8px 12px;line-height:1.7"><p style="margin:0 0 6px"><b>${b?.title || L('示例笔记', 'Sample note')}</b></p><p style="margin:0">${b?.body || L('这里显示笔记的内容。', 'The note content shows up here.')}</p></div>`);
+    return () => { el.replaceChildren(); };
   },
 };
 
 const { world, docs, fresh } = load();
 const params = new URLSearchParams(location.search);
-const view = new PalaceView(document.getElementById('app')!, { world, docs, host, enter: params.get('enter'), locale: LANG });
+const view = new PalaceView(document.getElementById('app'), { world, docs, host, enter: params.get('enter'), locale: LANG });
 if (!world || fresh) host.onWorldChange(view.world);
 (window as any).palaceView = view;
 (window as any).structure = structure;
 (window as any).resetPalace = () => {
-  Object.keys(localStorage).filter(k => k.startsWith('kmind-palace:')).forEach(k => localStorage.removeItem(k));
+  Object.keys(store).filter(k => k.startsWith('kmind-palace:')).forEach(k => store.removeItem(k));
   location.reload();
 };
 
@@ -276,7 +278,7 @@ const v: any = view;
 
 // dev-only：?demo=card|list|build|palette|edit|night|inside —— 打开页面后直接进入某个界面状态，方便无头浏览器截图
 const demo = params.get('demo');
-if (demo) setTimeout(() => {
+if (demo) window.setTimeout(() => {
   const c: any = v.townCtl;
   const first = [...v.docs.values()].sort((a: PalaceDoc, b: PalaceDoc) => b.items.length - a.items.length)[1];
   if (demo === 'card') c.select(first.id);
@@ -293,7 +295,7 @@ if (demo) setTimeout(() => {
   }
   if (demo === 'far') v.flyToWorld(.01);
   if (demo === 'planet') v.flyToPlanet(.01);
-  if (demo === 'region') { v.flyToWorld(.01); setTimeout(() => c.selectRegion(v.world.regions[1].id), 600); }
-  if (demo === 'island') { v.flyToWorld(.01); setTimeout(() => c.openNewIsland(), 600); }
+  if (demo === 'region') { v.flyToWorld(.01); window.setTimeout(() => c.selectRegion(v.world.regions[1].id), 600); }
+  if (demo === 'island') { v.flyToWorld(.01); window.setTimeout(() => c.openNewIsland(), 600); }
   if (demo.startsWith('go:')) v.flyToRegion(v.world.regions[Number(demo.slice(3))].id, .01);
 }, 2400);

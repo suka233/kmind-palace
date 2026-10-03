@@ -1,5 +1,5 @@
 import { Plugin, Dialog, openTab, openMobileFileById, getFrontend, showMessage } from 'siyuan';
-import { PalaceView, PalaceStore, setLocale, type HostAdapter } from '@kmind-palace/core';
+import { PalaceView, PalaceStore, setLocale, html, type HostAdapter } from '@kmind-palace/core';
 
 /** 思源的界面语言（zh-CN、en、zh-CHT……） */
 const siyuanLang = () => (window as any).siyuan?.config?.lang as string | undefined;
@@ -28,7 +28,7 @@ type TabModel = { tab?: { updateTitle?(title: string): void } } | null;
 // 此时旧实例已不可用：把页签登记到全局，等下一个实例 onload 时接管。
 const GLOBAL_KEY = '__kmindPalacePlugin';
 const PENDING_KEY = '__kmindPalacePendingTabs';
-const G = globalThis as any;
+const G = window as any;
 
 export default class KMindPalacePlugin extends Plugin {
   private store!: PalaceStore;
@@ -59,12 +59,12 @@ export default class KMindPalacePlugin extends Plugin {
     this.addTab({
       type: TAB_TYPE,
       init() {
-        void plugin.mount(this.element as HTMLElement, this.data?.palaceId, this as TabModel);
+        void plugin.mount(this.element as HTMLElement, this.data?.palaceId, this);
       },
       update() {
         const el = this.element as HTMLElement;
         const current = G[GLOBAL_KEY] as KMindPalacePlugin | undefined;
-        if (current && current !== plugin) { void current.mount(el, this.data?.palaceId, this as TabModel); return; }
+        if (current && current !== plugin) { void current.mount(el, this.data?.palaceId, this); return; }
         plugin.unmount(el);
         (G[PENDING_KEY] ||= new Map()).set(el, { palaceId: this.data?.palaceId, model: this as TabModel });
         const tip = document.createElement('div');
@@ -170,7 +170,7 @@ export default class KMindPalacePlugin extends Plugin {
       const view = new PalaceView(container, { world, docs, host: this.createHost(model), enter: palaceId || lastOpened });
       this.mounted.set(el, { view, container });
     } catch (e) {
-      container.innerHTML = `<div class="kmind-palace-error">${this.t('loadFailed', { msg: String((e as Error)?.message || e) })}</div>`;
+      container.replaceChildren(html`<div class="kmind-palace-error">${this.t('loadFailed', { msg: String((e as Error)?.message || e) })}</div>`);
     }
   }
 
@@ -207,7 +207,7 @@ export default class KMindPalacePlugin extends Plugin {
         // 记下最后所在的位置：下次打开（或重启后恢复页签）时回到这里
         void this.store.setLastOpened(id);
         // 推迟一拍：页签刚创建时标题元素可能还没就绪（rAF 在后台窗口里不触发，所以用 setTimeout）
-        setTimeout(() => {
+        window.setTimeout(() => {
           try { model?.tab?.updateTitle?.(id ? `${name} · ${this.t('tabTitle')}` : this.t('tabTitle')); } catch { /* 移动端没有页签 */ }
         }, 0);
       },
@@ -219,6 +219,12 @@ export default class KMindPalacePlugin extends Plugin {
       watchDocs: (cb) => watchDocs(this, cb),
       noteSource: 'siyuan',
       locale: siyuanLang(),
+      isMobile: this.isMobile,
+      // 界面偏好（画质、看过的提示）：思源每个窗口共用浏览器的本地存储
+      prefs: {
+        get: (key) => window.localStorage.getItem(key),
+        set: (key, value) => window.localStorage.setItem(key, value),
+      },
       saveMedia: (blob, id) => saveMedia(this, blob, id),
       loadMedia: (id) => loadMedia(this, id),
       ai: this.ai.adapter(),
@@ -230,6 +236,6 @@ export default class KMindPalacePlugin extends Plugin {
   }
 
   t(key: string, vars: Record<string, string> = {}) {
-    return String(this.i18n[key] ?? key).replace(/\$\{(\w+)\}/g, (_, k) => vars[k] ?? '');
+    return (this.i18n[key] as string ?? key).replace(/\$\{(\w+)\}/g, (_, k) => vars[k] ?? '');
   }
 }

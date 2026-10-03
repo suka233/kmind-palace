@@ -5,7 +5,7 @@ import type { PalaceView } from '../view';
 import { Character } from '../avatar';
 import { cleanLook } from '../look';
 import { locusKey, parseLocus } from '../schema';
-import { escapeHtml } from '../icons';
+import { html } from '../dom';
 import { itemDisplayName } from '../build';
 import { t } from '../i18n';
 import type { SocialApi } from './api';
@@ -30,8 +30,8 @@ class RoomSocket {
   status: Status = 'idle';
   private retry = 0;
   private failures = 0;
-  private timer: ReturnType<typeof setTimeout> | null = null;
-  private ping: ReturnType<typeof setInterval> | null = null;
+  private timer: number | null = null;
+  private ping: number | null = null;
   private stopped = false;
 
   constructor(private url: () => string, private onMsg: (m: RoomServerMsg) => void, private onStatus: (s: Status, why?: string) => void) { }
@@ -47,7 +47,7 @@ class RoomSocket {
       this.retry = 0;
       this.failures = 0;
       this.setStatus('open');
-      this.ping = setInterval(() => this.send({ t: 'ping' }), 25e3);
+      this.ping = window.setInterval(() => this.send({ t: 'ping' }), 25e3);
     };
     ws.onmessage = (e) => {
       let m: RoomServerMsg;
@@ -55,7 +55,7 @@ class RoomSocket {
       this.onMsg(m);
     };
     ws.onclose = (e) => {
-      if (this.ping) { clearInterval(this.ping); this.ping = null; }
+      if (this.ping) { window.clearInterval(this.ping); this.ping = null; }
       if (this.ws !== ws) return;
       this.ws = null;
       if (this.stopped) return;
@@ -69,7 +69,7 @@ class RoomSocket {
   private scheduleRetry() {
     this.setStatus('connecting');
     const ms = Math.min(30e3, 1000 * 2 ** this.retry++);
-    this.timer = setTimeout(() => { this.timer = null; if (!this.stopped) this.connect(); }, ms);
+    this.timer = window.setTimeout(() => { this.timer = null; if (!this.stopped) this.connect(); }, ms);
   }
 
   private setStatus(s: Status, why?: string) {
@@ -83,8 +83,8 @@ class RoomSocket {
 
   close() {
     this.stopped = true;
-    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
-    if (this.ping) { clearInterval(this.ping); this.ping = null; }
+    if (this.timer) { window.clearTimeout(this.timer); this.timer = null; }
+    if (this.ping) { window.clearInterval(this.ping); this.ping = null; }
     const ws = this.ws;
     this.ws = null;
     try { ws?.close(1000); } catch { /* 已断 */ }
@@ -122,7 +122,7 @@ export class RoomController {
   constructor(private v: PalaceView, private api: () => SocialApi | null) {
     this.group.name = 'kp-peers';
     v.scene.add(this.group);
-    v.root.insertAdjacentHTML('beforeend', `<div class="kp-live kp-glass kp-hidden kp-palace-only kp-iso-only" data-ref="room"></div>`);
+    v.root.append(html`<div class="kp-live kp-glass kp-hidden kp-palace-only kp-iso-only" data-ref="room"></div>`);
     v.ui.room = v.root.querySelector('[data-ref="room"]') as HTMLElement;
   }
 
@@ -138,7 +138,7 @@ export class RoomController {
     if (!want || !this.api()) return;
     this.palaceId = want;
     this.why = '';
-    const api = this.api()!;
+    const api = this.api();
     this.sock = new RoomSocket(() => api.roomUrl(want), (m) => this.onMsg(m), (s, why) => { if (why) this.why = why; if (s === 'open') this.hello(); this.render(); });
     this.sock.connect();
     this.render();
@@ -165,7 +165,7 @@ export class RoomController {
   /** 自己的外观（小管家）变了 */
   hello() {
     const pet = this.v.companion.pet;
-    this.sock?.send({ t: 'hello', look: cleanLook(pet.look) as any });
+    this.sock?.send({ t: 'hello', look: cleanLook(pet.look) });
     this.lastState = '';
   }
 
@@ -198,7 +198,7 @@ export class RoomController {
       }
       case 'look': {
         const a = this.avatars.get(m.id);
-        if (a) { a.peer.look = m.look; a.ch.setLook(m.look as any); }
+        if (a) { a.peer.look = m.look; a.ch.setLook(m.look); }
         break;
       }
       case 'emote': {
@@ -209,7 +209,7 @@ export class RoomController {
       case 'chat': {
         const a = this.avatars.get(m.id);
         if (!a) break;
-        this.say(a.bubble, escapeHtml(m.text), (t) => { a.bubbleUntil = t; }, 5);
+        this.say(a.bubble, html`${m.text}`, (t) => { a.bubbleUntil = t; }, 5);
         this.log.push({ who: a.peer.name, text: m.text });
         break;
       }
@@ -271,8 +271,8 @@ export class RoomController {
     if (a.peer.owner) this.ownerOnline = false;
   }
 
-  private say(b: CSS2DObject, html: string, set: (t: number) => void, secs = 3) {
-    b.element.innerHTML = html;
+  private say(b: CSS2DObject, content: DocumentFragment, set: (t: number) => void, secs = 3) {
+    b.element.replaceChildren(content);
     b.element.classList.remove('kp-hidden');
     set(this.time + secs);
   }
@@ -281,7 +281,7 @@ export class RoomController {
     const icon = EMOTES[e];
     if (!icon) return;
     ch.play(e === 'wave' ? 'wave' : 'hop');
-    this.say(b, `<span class="kp-emote">${icon}</span>`, set, 2.5);
+    this.say(b, html`<span class="kp-emote">${icon}</span>`, set, 2.5);
   }
 
   /** 每帧：别人的小人往目标位置插值；自己的位置变了就发出去。返回 true 需要渲染 */
@@ -336,14 +336,14 @@ export class RoomController {
     const c = this.v.companion;
     if (!c.ch || !EMOTES[e]) return;
     c.ch.play(e === 'wave' ? 'wave' : 'hop');
-    c.say(`<span class="kp-emote">${EMOTES[e]}</span>`, 2500);
+    c.say(html`<span class="kp-emote">${EMOTES[e]}</span>`, 2500);
     this.sock?.send({ t: 'emote', e: e as any });
   }
 
   chat(text: string) {
     text = text.trim().slice(0, 80);
     if (!text) return;
-    this.v.companion.say(escapeHtml(text), 5000);
+    this.v.companion.say(html`${text}`, 5000);
     this.log.push({ who: t('我'), text });
     this.sock?.send({ t: 'chat', text });
     this.render();
@@ -371,19 +371,19 @@ export class RoomController {
     el.classList.toggle('kp-hidden', !active);
     if (!active) return;
     if (!this.open) {
-      el.innerHTML = `<div class="kp-live-head"><span class="kp-live-dot kp-off"></span><b>${escapeHtml(this.why || t('正在连接…'))}</b></div>`;
+      el.replaceChildren(html`<div class="kp-live-head"><span class="kp-live-dot kp-off"></span><b>${this.why || t('正在连接…')}</b></div>`);
       return;
     }
-    const names = [...this.avatars.values()].map(a => `<span class="kp-live-chip${a.peer.owner ? ' kp-owner' : ''}">${escapeHtml(a.peer.name)}</span>`).join('');
-    const log = this.log.slice(-4).map(l => `<div><b></b><span></span></div>`).join('');
-    el.innerHTML = `
+    const names = [...this.avatars.values()].map(a => html`<span class="kp-live-chip${a.peer.owner ? ' kp-owner' : ''}">${a.peer.name}</span>`);
+    const log = this.log.slice(-4).map(() => html`<div><b></b><span></span></div>`);
+    el.replaceChildren(html`
       <div class="kp-live-head"><span class="kp-live-dot"></span><b>${this.peers ? t('{n} 人在这里', { n: this.peers + 1 }) : t('只有你在这里')}</b>${names}</div>
-      ${log ? `<div class="kp-live-log">${log}</div>` : ''}
-      <div class="kp-live-emotes">${Object.entries(EMOTES).map(([k, i]) => `<button data-act="roomEmote" data-e="${k}" title="${k}">${i}</button>`).join('')}</div>
+      ${log.length ? html`<div class="kp-live-log">${log}</div>` : ''}
+      <div class="kp-live-emotes">${Object.entries(EMOTES).map(([k, i]) => html`<button data-act="roomEmote" data-e="${k}" title="${k}">${i}</button>`)}</div>
       <div class="kp-live-chat"><input data-field="roomChat" maxlength="80" placeholder="${t('说点什么，回车发送')}" spellcheck="false"></div>
       ${this.isOwner
-        ? `<label class="kp-soc-opt"><input type="checkbox" data-field="roomGuide"${this.guiding ? ' checked' : ''}> ${t('带大家参观（我选中哪件东西，大家的镜头就跟过去）')}</label>`
-        : `<label class="kp-soc-opt"><input type="checkbox" data-field="roomFollow"${this.following ? ' checked' : ''}> ${t('跟着主人看')}${this.ownerOnline ? '' : t('（主人不在）')}</label>`}`;
+        ? html`<label class="kp-soc-opt"><input type="checkbox" data-field="roomGuide" ${this.guiding ? 'checked' : ''}> ${t('带大家参观（我选中哪件东西，大家的镜头就跟过去）')}</label>`
+        : html`<label class="kp-soc-opt"><input type="checkbox" data-field="roomFollow" ${this.following ? 'checked' : ''}> ${t('跟着主人看')}${this.ownerOnline ? '' : t('（主人不在）')}</label>`}`);
     el.querySelectorAll<HTMLElement>('.kp-live-log > div').forEach((d, i) => {
       const l = this.log.slice(-4)[i];
       d.querySelector('b').textContent = t('{name}：', { name: l.who });

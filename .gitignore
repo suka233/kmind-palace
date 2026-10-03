@@ -10,3 +10,6 @@ packages/obsidian-plugin/dev/
 .claude/
 .env
 .vitest/
+# npm run build 的产物（Obsidian 的构建复现用）
+/main.js
+/styles.css

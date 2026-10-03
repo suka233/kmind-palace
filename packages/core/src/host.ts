@@ -86,9 +86,19 @@ export interface AiAdapter {
  * 宿主适配器：core 只通过这个接口与笔记软件交互。
  * 所有方法都是可选的，缺失时对应的 UI 会自动隐藏。
  */
+/** 简单的键值存储 */
+export interface Prefs {
+  get(key: string): string | null;
+  set(key: string, value: string): void;
+}
+
 export interface HostAdapter {
   /** 界面语言（zh-CN、en……，宿主自己的语言设置）；不给时按浏览器语言 */
   locale?: string;
+  /** 是否手机 / 平板（用来挑画质档位）；不给时按是否触屏猜 */
+  isMobile?: boolean;
+  /** 本机的界面偏好（画质、看过的新手提示）；不给时只在这次打开期间记住 */
+  prefs?: Prefs;
   /** 让用户挑一个块（搜索对话框等），取消时返回 null */
   pickBlock?(opts?: { current?: string; itemName?: string }): Promise<BlockRef | null>;
   /** 打开 / 跳转到块 */

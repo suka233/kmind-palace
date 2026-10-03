@@ -515,7 +515,7 @@ export function createKit({ maxAniso = 8 }: { maxAniso?: number } = {}) {
    */
   function loadModel(id: string): Promise<THREE.Object3D> {
     let p = models.get(id);
-    if (p) return p;
+    if (p !== undefined) return p;
     const load = runtime.loadMedia;
     if (!load) return Promise.reject(new Error(t('当前环境不能读取模型')));
     p = load(id).then(url => new GLTFLoader().loadAsync(url)).then((gltf) => {

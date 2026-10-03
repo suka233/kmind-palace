@@ -134,7 +134,7 @@ export function normalizeWorld(raw: unknown): PalaceWorld {
     ...r,
     theme: r.theme || 'island',
     seed: Number.isFinite(r.seed) ? r.seed : 1,
-    origin: (Array.isArray(r.origin) ? r.origin : [0, 0]) as Vec2,
+    origin: (Array.isArray(r.origin) ? r.origin : [0, 0]),
     palaces: (Array.isArray(r.palaces) ? r.palaces : []).filter(p => p && p.palaceId && Array.isArray(p.pos)).map(p => ({ ...p, rot: normRot(p.rot) })),
   }));
   if (!regions.length) regions.push(createRegion());

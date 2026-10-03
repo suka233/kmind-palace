@@ -1,6 +1,7 @@
 import type * as THREE from 'three';
 import type { PalaceView, Quality } from './view';
-import { ICONS, escapeHtml } from './icons';
+import { ICONS } from './icons';
+import { html, rich } from './dom';
 import { t, isZh } from './i18n';
 
 /* =====================================================================
@@ -8,7 +9,7 @@ import { t, isZh } from './i18n';
  *   第一次打开：欢迎页（几张卡片讲清楚小镇、宫殿、记忆桩、回忆、小管家、串门）
  *   第一次做某件事：在旁边冒一个小提示（进宫殿、选中家具、漫游、小镇里的「好友」），每个只出现一次
  *   右上角「设置」：画质、小管家、再看一遍引导、插件设置
- * 看过哪些存在本机（localStorage），换设备会再看一遍。
+ * 看过哪些存在本机（宿主的 prefs），换设备会再看一遍。
  * ===================================================================== */
 
 const GUIDE_KEY = 'kmind-palace:guide';
@@ -35,39 +36,40 @@ const TIPS: Record<string, string> = {
   friends: '右上角「好友」：加好友、去好友的宫殿串门。',
 };
 
-function load(key: string): string | null {
-  try { return localStorage.getItem(key); } catch { return null; }
-}
-function save(key: string, v: string) {
-  try { localStorage.setItem(key, v); } catch { /* 隐私模式：下次再提示 */ }
-}
 
 export class Onboarding {
+  private load(key: string): string | null {
+    try { return this.v.prefs.get(key); } catch { return null; }
+  }
+  private save(key: string, v: string) {
+    try { this.v.prefs.set(key, v); } catch { /* 存不了：下次再提示 */ }
+  }
+
   private step = 0;
   private open = false;
   private seenTips: Set<string>;
-  private tipTimer: ReturnType<typeof setTimeout> | null = null;
+  private tipTimer: number | null = null;
   private currentTip = '';
   settingsOpen = false;
 
   constructor(private v: PalaceView) {
-    this.seenTips = new Set((load(TIPS_KEY) || '').split(',').filter(Boolean));
-    v.root.insertAdjacentHTML('beforeend', `
+    this.seenTips = new Set((this.load(TIPS_KEY) || '').split(',').filter(Boolean));
+    v.root.append(html`
       <div class="kp-overlay kp-center kp-hidden" data-ref="guideWrap"><div class="kp-guide kp-glass" data-ref="guide"></div></div>
       <div class="kp-coach kp-glass kp-hidden" data-ref="coach"></div>
       <div class="kp-settings kp-glass kp-hidden" data-ref="settings"></div>`);
     for (const r of ['guideWrap', 'guide', 'coach', 'settings']) v.ui[r] = v.root.querySelector(`[data-ref="${r}"]`) as HTMLElement;
-    v.root.querySelector('.kp-topright')?.insertAdjacentHTML('beforeend',
-      `<button class="kp-gear-btn kp-glass" data-act="settingsOpen" data-ref="gearBtn" title="${t('设置：画质、小管家、新手引导')}">${ICONS.gear}</button>`);
+    v.root.querySelector('.kp-topright')?.append(
+      html`<button class="kp-gear-btn kp-glass" data-act="settingsOpen" data-ref="gearBtn" title="${t('设置：画质、小管家、新手引导')}">${rich(ICONS.gear)}</button>`);
     v.ui.gearBtn = v.root.querySelector('[data-ref="gearBtn"]') as HTMLElement;
   }
 
   /** 打开时：没看过引导就看一遍（只读的网页查看器里不显示） */
   start() {
     if (this.v.readonly) return;
-    const seen = Number(load(GUIDE_KEY)) || 0;
-    if (seen < GUIDE_VERSION) setTimeout(() => this.showGuide(), 900);
-    else setTimeout(() => this.onTown(), 1500);
+    const seen = Number(this.load(GUIDE_KEY)) || 0;
+    if (seen < GUIDE_VERSION) window.setTimeout(() => this.showGuide(), 900);
+    else window.setTimeout(() => this.onTown(), 1500);
   }
 
   /** 引导的几页：没开放串门时去掉「串门」那页 */
@@ -89,24 +91,24 @@ export class Onboarding {
   private closeGuide() {
     this.open = false;
     this.v.ui.guideWrap.classList.add('kp-hidden');
-    save(GUIDE_KEY, String(GUIDE_VERSION));
+    this.save(GUIDE_KEY, String(GUIDE_VERSION));
   }
 
   private renderGuide() {
     const steps = this.steps, s = steps[this.step], last = this.step === steps.length - 1;
     const hasHome = this.v.docs.size > 0;
-    this.v.ui.guide.innerHTML = `
+    this.v.ui.guide.replaceChildren(html`
       <button class="kp-close kp-guide-skip" data-act="guideSkip" title="${t('跳过')}">${t('跳过')}</button>
       <div class="kp-guide-icon">${s.icon}</div>
       <h2>${t(s.title)}</h2>
-      <p>${t(s.body)}</p>
-      <div class="kp-guide-dots">${steps.map((_, i) => `<i class="${i === this.step ? 'kp-on' : ''}" data-act="guideGo" data-i="${i}"></i>`).join('')}</div>
+      <p>${rich(t(s.body))}</p>
+      <div class="kp-guide-dots">${steps.map((_, i) => html`<i class="${i === this.step ? 'kp-on' : ''}" data-act="guideGo" data-i="${i}"></i>`)}</div>
       <div class="kp-route-go">
-        ${this.step ? `<button data-act="guidePrev">${t('上一步')}</button>` : ''}
+        ${this.step ? html`<button data-act="guidePrev">${t('上一步')}</button>` : ''}
         ${last
-          ? `<button class="kp-primary" data-act="guideDone" data-enter="${hasHome ? '1' : ''}">${hasHome ? t('进我的家看看') : t('开始')}</button>`
-          : `<button class="kp-primary" data-act="guideNext">${t('下一步')}</button>`}
-      </div>`;
+          ? html`<button class="kp-primary" data-act="guideDone" data-enter="${hasHome ? '1' : ''}">${hasHome ? t('进我的家看看') : t('开始')}</button>`
+          : html`<button class="kp-primary" data-act="guideNext">${t('下一步')}</button>`}
+      </div>`);
   }
 
   // =====================================================================
@@ -116,37 +118,37 @@ export class Onboarding {
   /** 提示一次（看过就不再出现）；anchor 给了就显示在它下面，否则在画面下方中间 */
   tip(id: string, anchor?: HTMLElement | null) {
     if (this.v.readonly || this.open || this.seenTips.has(id) || !TIPS[id]) return;
-    if (Number(load(GUIDE_KEY) || 0) < GUIDE_VERSION) return;
+    if (Number(this.load(GUIDE_KEY) || 0) < GUIDE_VERSION) return;
     this.seenTips.add(id);
-    save(TIPS_KEY, [...this.seenTips].join(','));
+    this.save(TIPS_KEY, [...this.seenTips].join(','));
     const el = this.v.ui.coach;
     this.currentTip = id;
-    el.innerHTML = `<span>💡 ${t(TIPS[id])}</span><button data-act="coachOk">${t('知道了')}</button>`;
+    el.replaceChildren(html`<span>💡 ${rich(t(TIPS[id]))}</span><button data-act="coachOk">${t('知道了')}</button>`);
     el.classList.remove('kp-hidden');
     el.classList.toggle('kp-anchored', !!anchor);
     if (anchor && anchor.offsetParent) {
       const r = anchor.getBoundingClientRect(), root = this.v.root.getBoundingClientRect();
       el.style.top = `${r.bottom - root.top + 8}px`;
-      el.style.left = '';
+      el.style.removeProperty('left');
       el.style.right = `${Math.max(8, root.right - r.right)}px`;
-      el.style.bottom = '';
+      el.style.removeProperty('bottom');
     } else {
-      el.style.top = el.style.left = el.style.right = el.style.bottom = '';
+      for (const k of ['top', 'left', 'right', 'bottom']) el.style.removeProperty(k);
     }
-    if (this.tipTimer) clearTimeout(this.tipTimer);
-    this.tipTimer = setTimeout(() => this.hideTip(), 12e3);
+    if (this.tipTimer) window.clearTimeout(this.tipTimer);
+    this.tipTimer = window.setTimeout(() => this.hideTip(), 12e3);
   }
 
   /** 第一次遇到某件事：标记看过，返回 true（由调用方自己展示，例如小管家的自我介绍） */
   consume(id: string): boolean {
-    if (this.v.readonly || this.seenTips.has(id) || Number(load(GUIDE_KEY) || 0) < GUIDE_VERSION) return false;
+    if (this.v.readonly || this.seenTips.has(id) || Number(this.load(GUIDE_KEY) || 0) < GUIDE_VERSION) return false;
     this.seenTips.add(id);
-    save(TIPS_KEY, [...this.seenTips].join(','));
+    this.save(TIPS_KEY, [...this.seenTips].join(','));
     return true;
   }
 
   hideTip() {
-    if (this.tipTimer) { clearTimeout(this.tipTimer); this.tipTimer = null; }
+    if (this.tipTimer) { window.clearTimeout(this.tipTimer); this.tipTimer = null; }
     this.currentTip = '';
     this.v.ui.coach?.classList.add('kp-hidden');
   }
@@ -158,13 +160,13 @@ export class Onboarding {
 
   onPalaceEntered() {
     // 小管家在的话它自己会介绍（见 Companion），这里只提示「点家具」
-    setTimeout(() => { if (this.v.level === 'palace') this.tip('palace'); }, this.v.companion.ch ? 7000 : 2500);
+    window.setTimeout(() => { if (this.v.level === 'palace') this.tip('palace'); }, this.v.companion.ch ? 7000 : 2500);
   }
 
   onSelect(obj: THREE.Object3D | null) {
     if (!obj || this.v.level !== 'palace') return;
     if (this.currentTip === 'palace') this.hideTip();
-    if (!this.v.bindingAt(obj, this.v.selectedSlot)) setTimeout(() => this.tip('select'), 600);
+    if (!this.v.bindingAt(obj, this.v.selectedSlot)) window.setTimeout(() => this.tip('select'), 600);
   }
 
   onWalk() { this.tip('walk'); }
@@ -184,21 +186,21 @@ export class Onboarding {
     const q = v.qualityAuto ? 'auto' : v.quality;
     // 「高」在字典里已经是物件参数的「高度」（Height），画质档位这里单独给英文
     const names: Record<Quality | 'auto', string> = isZh() ? { auto: '自动', high: '高', medium: '中', low: '低' } : { auto: 'Auto', high: 'High', medium: 'Medium', low: 'Low' };
-    const petName = escapeHtml(v.companion.petName);
-    v.ui.settings.innerHTML = `
+    const petName = v.companion.petName;
+    v.ui.settings.replaceChildren(html`
       <div class="kp-routes-head"><b>${t('设置')}</b><button class="kp-close" data-act="settingsClose">×</button></div>
-      <div class="kp-route-sub">${t('画质')}${v.qualityAuto ? `<small>${t('（现在：{q}）', { q: names[v.quality] })}</small>` : ''}</div>
-      <div class="kp-set-seg">${(['auto', 'high', 'medium', 'low'] as const).map(k => `<button class="${q === k ? 'kp-on' : ''}" data-act="setQuality" data-q="${k}">${names[k]}</button>`).join('')}</div>
+      <div class="kp-route-sub">${t('画质')}${v.qualityAuto ? html`<small>${t('（现在：{q}）', { q: names[v.quality] })}</small>` : ''}</div>
+      <div class="kp-set-seg">${(['auto', 'high', 'medium', 'low'] as const).map(k => html`<button class="${q === k ? 'kp-on' : ''}" data-act="setQuality" data-q="${k}">${names[k]}</button>`)}</div>
       <div class="kp-route-stats">${t('卡顿时选低一档；「自动」会按设备挑选，持续卡顿时自动降一档。')}</div>
-      ${v.readonly ? '' : `
+      ${v.readonly ? '' : html`
       <div class="kp-route-sub">${t('小管家')}</div>
       <div class="kp-route-tools">
-        ${v.companion.hidden ? `<button data-act="petCall">${t('叫 {name} 回来', { name: petName })}</button>` : `<button data-act="setPetDress">${t('给 {name} 换装', { name: petName })}</button><button data-act="petHide">${t('让它休息')}</button>`}
+        ${v.companion.hidden ? html`<button data-act="petCall">${t('叫 {name} 回来', { name: petName })}</button>` : html`<button data-act="setPetDress">${t('给 {name} 换装', { name: petName })}</button><button data-act="petHide">${t('让它休息')}</button>`}
       </div>
       <div class="kp-route-sub">${t('帮助')}</div>
       <div class="kp-route-tools"><button data-act="guideReplay">${t('再看一遍新手引导')}</button><button data-act="tipsReset">${t('重新显示小提示')}</button></div>`}
-      ${v.host.openSettings ? `<div class="kp-route-tools"><button data-act="setHost">${v.host.social ? t('插件设置（大模型、串门服务器）…') : t('插件设置（大模型）…')}</button></div>` : ''}
-      <div class="kp-set-keys"><b>${t('快捷键')}</b> ${t('双击进入宫殿 · Q/E 旋转 · W 墙体 · N 夜晚 · B 搭建 · R 复位 · ⌘K 搜索 · Esc 返回')}</div>`;
+      ${v.host.openSettings ? html`<div class="kp-route-tools"><button data-act="setHost">${v.host.social ? t('插件设置（大模型、串门服务器）…') : t('插件设置（大模型）…')}</button></div>` : ''}
+      <div class="kp-set-keys"><b>${t('快捷键')}</b> ${t('双击进入宫殿 · Q/E 旋转 · W 墙体 · N 夜晚 · B 搭建 · R 复位 · ⌘K 搜索 · Esc 返回')}</div>`);
   }
 
   onAction(act: string, el: HTMLElement): boolean {
@@ -230,11 +232,11 @@ export class Onboarding {
         else this.v.host.notify?.(t('进到一座宫殿里，点小管家就能换装'));
         return true;
       case 'guideReplay': this.showGuide(); return true;
-      case 'tipsReset': this.seenTips.clear(); save(TIPS_KEY, ''); this.v.host.notify?.(t('小提示会重新出现')); return true;
+      case 'tipsReset': this.seenTips.clear(); this.save(TIPS_KEY, ''); this.v.host.notify?.(t('小提示会重新出现')); return true;
       case 'setHost': this.toggleSettings(false); this.v.host.openSettings?.(); return true;
       case 'petCall': case 'petHide':
         // 交给小管家处理，这里只刷新面板
-        setTimeout(() => this.renderSettings(), 0);
+        window.setTimeout(() => this.renderSettings(), 0);
         return false;
     }
     return false;
@@ -249,6 +251,6 @@ export class Onboarding {
   }
 
   dispose() {
-    if (this.tipTimer) clearTimeout(this.tipTimer);
+    if (this.tipTimer) window.clearTimeout(this.tipTimer);
   }
 }

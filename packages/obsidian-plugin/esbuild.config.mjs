@@ -8,7 +8,16 @@ const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
 const outdir = production ? 'dist' : 'dev';
 fs.mkdirSync(outdir, { recursive: true });
-const copy = () => { for (const f of ['manifest.json', 'styles.css']) fs.copyFileSync(f, path.join(outdir, f)); };
+// styles.css = 宫殿视图的样式（core/src/styles.ts）+ 插件自己的样式；Obsidian 会自动加载它，视图里就不用再插 <style>
+async function paletteCss() {
+  const r = await esbuild.build({ entryPoints: ['../core/src/styles.ts'], bundle: true, write: false, format: 'esm', platform: 'neutral', logLevel: 'silent' });
+  const mod = await import(`data:text/javascript;base64,${Buffer.from(r.outputFiles[0].text).toString('base64')}`);
+  return mod.PALACE_CSS;
+}
+const copy = async () => {
+  fs.copyFileSync('manifest.json', path.join(outdir, 'manifest.json'));
+  fs.writeFileSync(path.join(outdir, 'styles.css'), `${(await paletteCss()).trim()}\n\n/* ---- 插件 ---- */\n${fs.readFileSync('styles.css', 'utf8')}`);
+};
 
 const ctx = await esbuild.context({
   entryPoints: ['src/main.ts'],

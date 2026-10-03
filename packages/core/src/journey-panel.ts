@@ -2,7 +2,7 @@ import type { PalaceView } from './view';
 import type { PalaceJourney } from './world';
 import { AUTO_ROUTE_ID, routesOf, isDue, needsPractice } from './route';
 import { resolveJourney, createJourney, deleteJourney } from './journey';
-import { escapeHtml } from './icons';
+import { html } from './dom';
 import { t } from './i18n';
 
 /* =====================================================================
@@ -52,24 +52,24 @@ export class JourneyPanel {
     const addDoc = this.addPalace ? v.docs.get(this.addPalace) : null;
     const addRoutes = addDoc ? routesOf(addDoc, v.slotSort) : [];
     const routeOpts = [
-      ...addRoutes.filter(r => r.id !== AUTO_ROUTE_ID).map(r => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.name)}${t('（{n} 站）', { n: r.stops.length })}</option>`),
-      `<option value="${AUTO_ROUTE_ID}">${t('全部记忆桩')}${t('（按位置）')}</option>`,
-    ].join('');
+      ...addRoutes.filter(r => r.id !== AUTO_ROUTE_ID).map(r => html`<option value="${r.id}">${r.name}${t('（{n} 站）', { n: r.stops.length })}</option>`),
+      html`<option value="${AUTO_ROUTE_ID}">${t('全部记忆桩')}${t('（按位置）')}</option>`,
+    ];
     const legs = cur ? resolveJourney(cur, v.docs, v.slotSort) : [];
     const bound = legs.flatMap(l => l.stops.filter(s => s.binding));
     const levels = bound.map(s => v.memoryOf(s.binding.blockId));
     const due = levels.filter(isDue).length, practice = levels.filter(needsPractice).length;
     const palaces = new Set(legs.filter(l => l.doc).map(l => l.palaceId)).size;
-    this.el.innerHTML = `
+    this.el.replaceChildren(html`
       <div class="kp-routes-head"><b>${t('旅程 · 跨宫殿路线')}</b><button class="kp-close" data-act="viewMap">×</button></div>
-      ${list.length ? `
+      ${list.length ? html`
       <div class="kp-route-pick">
-        <select data-field="journey">${list.map(j => `<option value="${escapeHtml(j.id)}"${j === cur ? ' selected' : ''}>${escapeHtml(j.name)}</option>`).join('')}
+        <select data-field="journey">${list.map(j => html`<option value="${j.id}"${j === cur ? ' selected' : ''}>${j.name}</option>`)}
           <option value="__new">${t('＋ 新建旅程')}</option></select>
         <button data-act="jpDelete" class="kp-danger">${this.confirmDelete ? t('确认删除') : t('删除')}</button>
       </div>
       <input class="kp-route-name" data-field="journeyName" maxlength="30" spellcheck="false">
-      <div class="kp-route-stats">${t('{n} 段', { n: legs.length })} · ${t('{n} 座宫殿', { n: palaces })} · ${t('{n} 站', { n: bound.length })}${due ? ` · <b class="kp-m-due">${t('待复习 {n}', { n: due })}</b>` : ''}</div>
+      <div class="kp-route-stats">${t('{n} 段', { n: legs.length })} · ${t('{n} 座宫殿', { n: palaces })} · ${t('{n} 站', { n: bound.length })}${due ? html` · <b class="kp-m-due">${t('待复习 {n}', { n: due })}</b>` : ''}</div>
       <div class="kp-route-go">
         <button class="kp-primary" data-act="jpStart"${bound.length ? '' : ' disabled'}>${t('开始回忆')}</button>
         <button data-act="jpPractice"${practice ? '' : ' disabled'} title="${t('跳过记得牢的记忆桩')}">${t('只练需要练的 · {n}', { n: practice })}</button>
@@ -78,20 +78,20 @@ export class JourneyPanel {
         const n = l.stops.filter(s => s.binding).length;
         const ld = l.stops.filter(s => s.binding && isDue(v.memoryOf(s.binding.blockId))).length;
         const sub = !l.doc ? t('这座宫殿已被删除') : !l.route ? t('这条路线已被删除') : `${l.route.name} · ${t('{n} 站', { n })}${ld ? ` · ${t('待复习 {n}', { n: ld })}` : ''}`;
-        return `<div class="kp-stop-row${l.doc && l.route && n ? '' : ' kp-off'}">
-          <button class="kp-stop-go" data-act="jpEnter" data-i="${i}" title="${t('进入这座宫殿')}"><i class="kp-dot kp-m-${ld ? 'due' : 'fresh'}">${i + 1}</i><span><b>${escapeHtml(l.doc?.name || t('（已删除）'))}</b><small>${escapeHtml(sub)}</small></span></button>
+        return html`<div class="kp-stop-row${l.doc && l.route && n ? '' : ' kp-off'}">
+          <button class="kp-stop-go" data-act="jpEnter" data-i="${i}" title="${t('进入这座宫殿')}"><i class="kp-dot kp-m-${ld ? 'due' : 'fresh'}">${i + 1}</i><span><b>${l.doc?.name || t('（已删除）')}</b><small>${sub}</small></span></button>
           <button class="kp-mini-btn" data-act="jpUp" data-i="${i}" title="${t('往前挪')}"${i ? '' : ' disabled'}>↑</button>
           <button class="kp-mini-btn" data-act="jpDown" data-i="${i}" title="${t('往后挪')}"${i < legs.length - 1 ? '' : ' disabled'}>↓</button>
           <button class="kp-mini-btn" data-act="jpDel" data-i="${i}" title="${t('移出旅程')}">×</button>
         </div>`;
-      }).join('') : `<div class="kp-empty">${t('还没有添加宫殿。在下面选一座宫殿和它的一条路线，按顺序加进来。')}</div>`}</div>
-      ${docs.length ? `<div class="kp-jp-add">
+      }) : html`<div class="kp-empty">${t('还没有添加宫殿。在下面选一座宫殿和它的一条路线，按顺序加进来。')}</div>`}</div>
+      ${docs.length ? html`<div class="kp-jp-add">
         <div class="kp-route-sub">${t('添加一段')}</div>
-        <div class="kp-route-pick"><select data-field="jpPalace">${docs.map(d => `<option value="${escapeHtml(d.id)}"${d.id === this.addPalace ? ' selected' : ''}>${escapeHtml(d.name)}</option>`).join('')}</select></div>
+        <div class="kp-route-pick"><select data-field="jpPalace">${docs.map(d => html`<option value="${d.id}"${d.id === this.addPalace ? ' selected' : ''}>${d.name}</option>`)}</select></div>
         <div class="kp-route-pick"><select data-field="jpRoute">${routeOpts}</select><button data-act="jpAdd">${t('添加')}</button></div>
-      </div>` : ''}` : `
+      </div>` : ''}` : html`
       <div class="kp-empty">${t('旅程把几座宫殿里的路线按顺序串起来：回忆时一座宫殿走完，会接着去下一座，一次复习完一整门课。')}</div>
-      <div class="kp-route-go"><button class="kp-primary" data-act="jpNew">${t('＋ 新建旅程')}</button></div>`}`;
+      <div class="kp-route-go"><button class="kp-primary" data-act="jpNew">${t('＋ 新建旅程')}</button></div>`}`);
     const name = this.el.querySelector<HTMLInputElement>('[data-field="journeyName"]');
     if (name && cur) name.value = cur.name;
   }

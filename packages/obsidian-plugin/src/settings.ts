@@ -46,7 +46,7 @@ export class PalaceSettingTab extends PluginSettingTab {
       .addDropdown(d => d.addOptions({ vivid: t('夸张荒诞'), warm: t('温馨写实'), brief: t('一句话') }).setValue(ai.style).onChange(v => { ai.style = v as OpenAiConfig['style']; save(); }));
     new Setting(containerEl).setName(t('接口地址')).setDesc(t('OpenAI 兼容接口，例如 https://api.openai.com/v1、DeepSeek、通义千问，或本地的 Ollama（http://127.0.0.1:11434/v1）'))
       .addText(c => c.setPlaceholder('https://api.openai.com/v1').setValue(ai.textBase).onChange(v => { ai.textBase = v.trim(); save(); }));
-    new Setting(containerEl).setName('API Key').setDesc(t('只存在本机的插件设置里，不会写进宫殿数据'))
+    new Setting(containerEl).setName('API key').setDesc(t('只存在本机的插件设置里，不会写进宫殿数据'))
       .addText(c => { c.inputEl.type = 'password'; c.setPlaceholder('sk-…').setValue(ai.textKey).onChange(v => { ai.textKey = v.trim(); save(); }); });
     new Setting(containerEl).setName(t('模型'))
       .addText(c => c.setPlaceholder('gpt-4o-mini').setValue(ai.textModel).onChange(v => { ai.textModel = v.trim(); save(); }));

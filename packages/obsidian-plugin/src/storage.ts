@@ -88,7 +88,10 @@ export class VaultData {
   }
 
   async mediaBlob(id: string) {
-    return fetch(await this.loadMedia(id)).then(r => r.blob());
+    const p = this.path(`media/${id}`);
+    if (!(await this.app.vault.adapter.exists(p))) throw new Error(t('文件不存在'));
+    const ext = id.split('.').pop() || '';
+    return new Blob([await this.app.vault.adapter.readBinary(p)], { type: MIME[ext] || 'application/octet-stream' });
   }
 
   dispose() {

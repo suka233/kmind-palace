@@ -9,6 +9,7 @@ import { planRoads, type RoadNet } from './roads';
 import { seedFromString } from './random';
 import { BEND, unbendRay } from './bend';
 import { t } from './i18n';
+import { html } from './dom';
 import { buildRoof } from './roof';
 import { THEMES, getTheme, type ThemePack } from './themes';
 import { commonMats, GRASS_Y, WATER_Y, type Landmark, type Mats, type ThemeCtx } from './themes/common';
@@ -219,7 +220,7 @@ export class RegionLayer {
     const el = this.tag.element, r = this.region;
     const palaces = r.palaces.map(p => docs.get(p.palaceId)).filter(Boolean);
     const loci = palaces.reduce((s, d) => s + palaceStats(d).loci, 0);
-    el.innerHTML = `<em></em><span><b></b><small>${t('{n} 座宫殿', { n: palaces.length })} · 📌 ${loci}</small></span>`;
+    el.replaceChildren(html`<em></em><span><b></b><small>${t('{n} 座宫殿', { n: palaces.length })} · 📌 ${loci}</small></span>`);
     el.querySelector('em').textContent = this.theme.icon;
     el.querySelector('b').textContent = r.name;
   }
@@ -499,7 +500,7 @@ export class WorldLayer {
     const el = s.tag.element;
     el.style.setProperty('--c', s.placed.roofColor || palaceColor(doc));
     const order = this.journeyOf?.(doc.id) || [];
-    el.innerHTML = `${order.length ? `<span class="kp-jorder" title="${t('旅程第 {list} 段', { list: order.join(t('、')) })}">${order.join('·')}</span>` : ''}<i></i><b></b><span class="kp-more">📌 ${st.loci}</span>${due ? `<span class="kp-due" title="${t('待复习')}">${due}</span>` : ''}`;
+    el.replaceChildren(html`${order.length ? html`<span class="kp-jorder" title="${t('旅程第 {list} 段', { list: order.join(t('、')) })}">${order.join('·')}</span>` : ''}<i></i><b></b><span class="kp-more">📌 ${st.loci}</span>${due ? html`<span class="kp-due" title="${t('待复习')}">${due}</span>` : ''}`);
     el.classList.toggle('kp-in-journey', order.length > 0);
     el.querySelector('b').textContent = doc.name;
     el.title = [doc.name, t('{n} 个房间', { n: st.rooms }), t('{n} 个物件', { n: st.items }), t('{n} 个记忆桩', { n: st.loci }), ...(due ? [t('{n} 个待复习', { n: due })] : [])].join(' · ');
@@ -713,7 +714,7 @@ function mergeBoxes(geos: THREE.BufferGeometry[]) {
     const size = nonIdx[0].attributes[name].itemSize;
     const arr = new Float32Array(count * size);
     let off = 0;
-    for (const g of nonIdx) { arr.set(g.attributes[name].array as Float32Array, off); off += g.attributes[name].array.length; }
+    for (const g of nonIdx) { arr.set(g.attributes[name].array, off); off += g.attributes[name].array.length; }
     out.setAttribute(name, new THREE.BufferAttribute(arr, size));
   }
   nonIdx.forEach(g => g.dispose());

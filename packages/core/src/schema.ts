@@ -177,7 +177,7 @@ const ID_CHARS = '0123456789abcdefghijklmnopqrstuvwxyz';
 /** 全局唯一的 id（宫殿、岛、世界、路线）：16 位加密随机数 */
 export function gid(prefix = '') {
   const bytes = new Uint8Array(16);
-  globalThis.crypto.getRandomValues(bytes);
+  crypto.getRandomValues(bytes);
   let s = '';
   for (const b of bytes) s += ID_CHARS[b % 36];
   return prefix + s;

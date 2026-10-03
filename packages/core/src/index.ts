@@ -1,6 +1,6 @@
 export * from './schema';
 export { materializeDecor, DECOR } from './decor';
-export type { BlockRef, HostAdapter, ReviewAdapter, ReviewState, Rating, DocSource, DocEntry, AiAdapter, ChatMessage, StoryStyle } from './host';
+export type { BlockRef, HostAdapter, Prefs, ReviewAdapter, ReviewState, Rating, DocSource, DocEntry, AiAdapter, ChatMessage, StoryStyle } from './host';
 export { storyMessages, cleanStory, imagePrompt, type StoryContext } from './story';
 export { memoryLevel, isDue, autoRoute, resolveRoute, routesOf, type MemoryLevel, type RouteStop } from './route';
 export { PalaceView, type PalaceViewOptions } from './view';
@@ -23,3 +23,4 @@ export { allItemsRoute } from './route';
 export { SocialApi, ApiError, type SocialAccount } from './social/api';
 export { cleanLook, seededLook, SPECIES, ACCESSORIES, DEFAULT_LOOK, type Look, type Species, type Accessory } from './look';
 export { t, tc, setLocale, getLocale, normalizeLocale, isZh, type Locale } from './i18n';
+export { html, rich, Rich, type Child } from './dom';

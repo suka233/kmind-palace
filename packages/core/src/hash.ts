@@ -56,7 +56,7 @@ export async function sha256Hex(data: Uint8Array | ArrayBuffer | Blob): Promise<
   const bytes = data instanceof Uint8Array ? data
     : data instanceof ArrayBuffer ? new Uint8Array(data)
       : new Uint8Array(await data.arrayBuffer());
-  const subtle = globalThis.crypto?.subtle;
+  const subtle = typeof crypto === 'undefined' ? undefined : crypto.subtle;
   if (subtle) {
     try { return hex(new Uint8Array(await subtle.digest('SHA-256', bytes as Uint8Array<ArrayBuffer>))); } catch { /* 退回纯 JS */ }
   }

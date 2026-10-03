@@ -23,7 +23,7 @@ export function pickImageFile(): Promise<File | null> {
 export function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const fr = new FileReader();
-    fr.onload = () => resolve(String(fr.result));
+    fr.onload = () => resolve(fr.result as string);   // readAsDataURL 的结果是字符串
     fr.onerror = () => reject(fr.error);
     fr.readAsDataURL(blob);
   });
@@ -35,7 +35,7 @@ export function pickFile(accept: string): Promise<File | null> {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = accept;
-    input.style.display = 'none';
+    input.hidden = true;
     document.body.appendChild(input);
     let done = false;
     const finish = (f: File | null) => {

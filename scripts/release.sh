@@ -77,6 +77,5 @@ cat <<DONE
 下一步（详见 docs/RELEASE.md）：
   1. 代码推到 GitHub 的公开仓库（suka233/kmind-palace）
   2. 在公开仓库建 Release，tag 写 $SY_VER（不带 v），上传 release/ 里的 4 个文件
-  3. 第一次发布：向 siyuan-note/bazaar 的 plugins.txt 加一行 suka233/kmind-palace、
-     向 obsidianmd/obsidian-releases 的 community-plugins.json 加一项，分别提 PR；以后发新版只要建新的 Release
+  3. 两边市场会自动发现新的 Release（思源集市、community.obsidian.md），不用再提 PR
 DONE

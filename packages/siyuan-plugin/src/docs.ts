@@ -1,5 +1,5 @@
 import { Dialog, fetchSyncPost, type Plugin } from 'siyuan';
-import { t, type DocEntry, type DocSource } from '@kmind-palace/core';
+import { t, html, type DocEntry, type DocSource } from '@kmind-palace/core';
 
 /* =====================================================================
  * 书架 = 笔记本：列文档、选书目来源、文档树变化时通知；用户照片的存取
@@ -28,15 +28,11 @@ export function watchDocs(plugin: Plugin, cb: () => void) {
   return () => plugin.eventBus.off('ws-main', handler);
 }
 
-function escapeHtml(s: string) {
-  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
 /**
  * 选书目来源：笔记本（摆它的顶层文档），或展开后选一篇文档（摆它的子文档）。
  */
 export function openSourcePicker(plugin: Plugin, opts: { current?: DocSource; mobile?: boolean }): Promise<DocSource | null> {
-  const i18n = (key: string) => String(plugin.i18n[key] ?? key);
+  const i18n = (key: string) => (plugin.i18n[key] as string ?? key);
   return new Promise((resolve) => {
     let settled = false;
     const finish = (v: DocSource | null) => {
@@ -47,28 +43,29 @@ export function openSourcePicker(plugin: Plugin, opts: { current?: DocSource; mo
     };
     const dialog = new Dialog({
       title: i18n('sourceTitle'),
-      content: `<div class="kmp-picker"><div class="kmp-caption">${escapeHtml(i18n('sourceHint'))}</div><div class="kmp-list kmp-tree"></div></div>`,
+      content: '<div class="kmp-picker"><div class="kmp-caption"></div><div class="kmp-list kmp-tree"></div></div>',
       width: opts.mobile ? '92vw' : '560px',
       height: opts.mobile ? '80vh' : '560px',
       destroyCallback: () => { if (!settled) { settled = true; resolve(null); } },
     });
     const tree = dialog.element.querySelector('.kmp-tree') as HTMLElement;
+    dialog.element.querySelector('.kmp-picker .kmp-caption').textContent = i18n('sourceHint');
     const cur = opts.current;
 
-    const row = (o: { box: string; path: string; name: string; depth: number; kids: number; notebook?: boolean }) => `
-      <div class="kmp-node${cur && cur.box === o.box && cur.path === o.path ? ' kmp-current' : ''}" data-box="${escapeHtml(o.box)}" data-path="${escapeHtml(o.path)}" data-name="${escapeHtml(o.name)}" style="padding-left:${8 + o.depth * 18}px">
+    const row = (o: { box: string; path: string; name: string; depth: number; kids: number; notebook?: boolean }) => html`
+      <div class="kmp-node${cur && cur.box === o.box && cur.path === o.path ? ' kmp-current' : ''}" data-box="${o.box}" data-path="${o.path}" data-name="${o.name}" style="padding-left:${8 + o.depth * 18}px">
         <span class="kmp-toggle${o.kids ? '' : ' kmp-leaf'}" data-act="toggle">${o.kids ? '›' : ''}</span>
-        <span class="kmp-node-name">${o.notebook ? '📚' : '📄'} ${escapeHtml(o.name)}${o.kids ? `<small>${o.notebook ? '' : escapeHtml(t('{n} 篇', { n: o.kids }))}</small>` : ''}</span>
-        ${o.kids ? `<button class="b3-button b3-button--small b3-button--outline" data-act="choose">${escapeHtml(i18n('sourceChoose'))}</button>` : ''}
+        <span class="kmp-node-name">${o.notebook ? '📚' : '📄'} ${o.name}${o.kids ? html`<small>${o.notebook ? '' : t('{n} 篇', { n: o.kids })}</small>` : ''}</span>
+        ${o.kids ? html`<button class="b3-button b3-button--small b3-button--outline" data-act="choose">${i18n('sourceChoose')}</button>` : ''}
       </div><div class="kmp-kids" hidden></div>`;
 
     void fetchSyncPost('/api/notebook/lsNotebooks', {}).then((res) => {
       const nbs = (res.code === 0 ? res.data?.notebooks || [] : []).filter((n: any) => !n.closed);
-      tree.innerHTML = nbs.map((n: any) => row({ box: n.id, path: '/', name: n.name, depth: 0, kids: 1, notebook: true })).join('')
-        || `<div class="kmp-empty">${escapeHtml(i18n('noNotebooks'))}</div>`;
+      const rows = nbs.map((n: any) => row({ box: n.id, path: '/', name: n.name, depth: 0, kids: 1, notebook: true }));
+      tree.replaceChildren(...(rows.length ? rows : [html`<div class="kmp-empty">${i18n('noNotebooks')}</div>`]));
     });
 
-    tree.addEventListener('click', async (e) => {
+    tree.addEventListener('click', (e) => void (async () => {
       const el = e.target as HTMLElement;
       const node = el.closest<HTMLElement>('.kmp-node');
       if (!node) return;
@@ -86,12 +83,12 @@ export function openSourcePicker(plugin: Plugin, opts: { current?: DocSource; mo
       const depth = Math.round((parseInt(node.style.paddingLeft) - 8) / 18) + 1;
       try {
         const files = await listFiles(box, path);
-        kids.innerHTML = files.map(f => row({ box, path: f.path, name: (f.name || '').replace(/\.sy$/, ''), depth, kids: f.subFileCount || 0 })).join('')
-          || `<div class="kmp-empty" style="padding-left:${8 + depth * 18}px">${escapeHtml(i18n('noDocs'))}</div>`;
+        const rows = files.map(f => row({ box, path: f.path, name: (f.name || '').replace(/\.sy$/, ''), depth, kids: f.subFileCount || 0 }));
+        kids.replaceChildren(...(rows.length ? rows : [html`<div class="kmp-empty" style="padding-left:${8 + depth * 18}px">${i18n('noDocs')}</div>`]));
       } catch (err) {
-        kids.innerHTML = `<div class="kmp-empty">${escapeHtml(String((err as Error)?.message || err))}</div>`;
+        kids.replaceChildren(html`<div class="kmp-empty">${String((err as Error)?.message || err)}</div>`);
       }
-    });
+    })());
   });
 }
 

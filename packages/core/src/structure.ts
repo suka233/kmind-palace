@@ -289,7 +289,7 @@ export function setFacePaint(wall: PalaceWall, side: 1 | -1, s0: number, s1: num
     if (p.s0 < s0) out.push({ ...p, s1: s0 });
     if (p.s1 > s1) out.push({ ...p, s0: s1 });
   }
-  if (paint) out.push({ side, s0, s1, ...paint } as WallPaint);
+  if (paint) out.push({ side, s0, s1, ...paint });
   wall.paint = out;
 }
 

@@ -9,7 +9,7 @@ import { AUTO_ROUTE_ID, autoRoute, resolveRoute, routesOf, needsPractice, isDue,
 import { resolveJourney, journeysWith, createJourney, pruneJourneys } from './journey';
 import type { PalaceJourney } from './world';
 import type { Rating } from './host';
-import { escapeHtml } from './icons';
+import { html, rich } from './dom';
 import { t } from './i18n';
 
 /* =====================================================================
@@ -177,34 +177,34 @@ export class RecallController {
     const saved = cur && cur.id !== AUTO_ROUTE_ID;
     const inRoute = new Set(stops.map(s => s.key));
     const missing = saved ? v.allLoci().filter(l => !inRoute.has(locusKey(l.item.id, l.slot))).length : 0;
-    el.innerHTML = `
+    el.replaceChildren(html`
       <div class="kp-routes-head"><b>${t('记忆路线')}</b><button class="kp-close" data-act="routesClose">×</button></div>
       <div class="kp-route-pick">
-        <select data-field="route">${routes.map(r => `<option value="${escapeHtml(r.id)}"${r === cur ? ' selected' : ''}>${escapeHtml(r.name)}${r.id === AUTO_ROUTE_ID ? t('（按位置）') : ''}</option>`).join('')}
+        <select data-field="route">${routes.map(r => html`<option value="${r.id}" ${r === cur ? 'selected' : ''}>${r.name}${r.id === AUTO_ROUTE_ID ? t('（按位置）') : ''}</option>`)}
           <option value="__new">${t('＋ 新建路线')}</option></select>
-        ${saved ? `<button data-act="routeDelete" class="kp-danger">${this.confirmDelete ? t('确认删除') : t('删除')}</button>` : ''}
+        ${saved ? html`<button data-act="routeDelete" class="kp-danger">${this.confirmDelete ? t('确认删除') : t('删除')}</button>` : ''}
       </div>
-      ${saved ? `<input class="kp-route-name" data-field="routeName" maxlength="30" spellcheck="false">` : ''}
-      <div class="kp-route-stats">${t('{n} 站', { n: bound.length })}${due ? ` · <b class="kp-m-due">${t('待复习 {n}', { n: due })}</b>` : ''}${stops.length > bound.length ? ` · ${t('{n} 站已解绑', { n: stops.length - bound.length })}` : ''}</div>
+      ${saved ? html`<input class="kp-route-name" data-field="routeName" maxlength="30" spellcheck="false">` : ''}
+      <div class="kp-route-stats">${t('{n} 站', { n: bound.length })}${due ? html` · <b class="kp-m-due">${t('待复习 {n}', { n: due })}</b>` : ''}${stops.length > bound.length ? ` · ${t('{n} 站已解绑', { n: stops.length - bound.length })}` : ''}</div>
       <div class="kp-route-go">
-        <button class="kp-primary" data-act="recallStart"${bound.length ? '' : ' disabled'}>${t('开始回忆')}</button>
-        <button data-act="recallDue"${practice ? '' : ' disabled'} title="${t('跳过记得牢的记忆桩')}">${t('只练需要练的 · {n}', { n: practice })}</button>
+        <button class="kp-primary" data-act="recallStart" ${bound.length ? '' : 'disabled'}>${t('开始回忆')}</button>
+        <button data-act="recallDue" ${practice ? '' : 'disabled'} title="${t('跳过记得牢的记忆桩')}">${t('只练需要练的 · {n}', { n: practice })}</button>
       </div>
       <div class="kp-stops">${stops.length ? stops.map((s, i) => {
         const lvl = s.binding ? v.memoryOf(s.binding.blockId) : 'none';
-        return `<div class="kp-stop-row${s.binding ? '' : ' kp-off'}" data-key="${escapeHtml(s.key)}">
-          <button class="kp-stop-go" data-act="stopFocus" data-key="${escapeHtml(s.key)}" title="${t(LEVEL_TEXT[lvl])}"><i class="kp-dot kp-m-${lvl}">${i + 1}</i><span><b></b><small></small></span></button>
-          <button class="kp-mini-btn" data-act="stopUp" data-key="${escapeHtml(s.key)}" title="${t('往前挪')}"${i ? '' : ' disabled'}>↑</button>
-          <button class="kp-mini-btn" data-act="stopDown" data-key="${escapeHtml(s.key)}" title="${t('往后挪')}"${i < stops.length - 1 ? '' : ' disabled'}>↓</button>
-          <button class="kp-mini-btn" data-act="stopDel" data-key="${escapeHtml(s.key)}" title="${t('移出路线')}">×</button>
+        return html`<div class="kp-stop-row${s.binding ? '' : ' kp-off'}" data-key="${s.key}">
+          <button class="kp-stop-go" data-act="stopFocus" data-key="${s.key}" title="${t(LEVEL_TEXT[lvl])}"><i class="kp-dot kp-m-${lvl}">${i + 1}</i><span><b></b><small></small></span></button>
+          <button class="kp-mini-btn" data-act="stopUp" data-key="${s.key}" title="${t('往前挪')}" ${i ? '' : 'disabled'}>↑</button>
+          <button class="kp-mini-btn" data-act="stopDown" data-key="${s.key}" title="${t('往后挪')}" ${i < stops.length - 1 ? '' : 'disabled'}>↓</button>
+          <button class="kp-mini-btn" data-act="stopDel" data-key="${s.key}" title="${t('移出路线')}">×</button>
         </div>`;
-      }).join('') : `<div class="kp-empty">${saved ? t('这条路线还是空的。打开「在场景里点选」，按顺序点击记忆桩。') : t('还没有记忆桩。先点选物件（或书架上的一本书）绑定笔记。')}</div>`}</div>
-      ${missing ? `<div class="kp-route-missing">${t('还有 {n} 个记忆桩不在这条路线上', { n: missing })} <button data-act="routeAddAll">${t('加到末尾')}</button></div>` : ''}
+      }) : html`<div class="kp-empty">${saved ? t('这条路线还是空的。打开「在场景里点选」，按顺序点击记忆桩。') : t('还没有记忆桩。先点选物件（或书架上的一本书）绑定笔记。')}</div>`}</div>
+      ${missing ? html`<div class="kp-route-missing">${t('还有 {n} 个记忆桩不在这条路线上', { n: missing })} <button data-act="routeAddAll">${t('加到末尾')}</button></div>` : ''}
       <div class="kp-route-tools">
         <button data-act="routeAuto" title="${t('从正门出发，按位置重新排')}">${t('按位置重排')}</button>
         <button data-act="routePick" class="${this.picking ? 'kp-on' : ''}" title="${t('在场景里点击记忆桩：不在路线上的加到末尾，在路线上的移出')}">${this.picking ? t('点选中… 完成') : t('在场景里点选')}</button>
       </div>
-      ${this.journeySection(cur)}`;
+      ${this.journeySection(cur)}`);
     el.querySelectorAll<HTMLElement>('.kp-stop-row').forEach((row, i) => {
       const s = stops[i];
       row.querySelector('b').textContent = s.binding ? (s.binding.title || s.binding.blockId) : t('（已解绑）');
@@ -215,21 +215,21 @@ export class RecallController {
   }
 
   /** 路线面板底部：经过这座宫殿的旅程，以及把当前路线加入旅程 */
-  private journeySection(cur: PalaceRoute | undefined) {
+  private journeySection(cur: PalaceRoute | undefined): DocumentFragment | null {
     const v = this.v, doc = v.doc;
-    if (!doc || !cur) return '';
+    if (!doc || !cur) return null;
     const list = journeysWith(v.world, doc.id);
     const all = v.world.journeys || [];
     const rows = list.map(j => {
       const palaces = new Set(j.legs.map(l => l.palaceId)).size;
-      return `<div class="kp-journey-row"><span><b>${escapeHtml(j.name)}</b><small>${t('{n} 段', { n: j.legs.length })} · ${t('{n} 座宫殿', { n: palaces })}</small></span>
-        <button data-act="routeJourneyGo" data-id="${escapeHtml(j.id)}" title="${t('从第一段开始，走完整个旅程')}">${t('走一遍')}</button></div>`;
-    }).join('');
-    return `<div class="kp-route-journeys">
+      return html`<div class="kp-journey-row"><span><b>${j.name}</b><small>${t('{n} 段', { n: j.legs.length })} · ${t('{n} 座宫殿', { n: palaces })}</small></span>
+        <button data-act="routeJourneyGo" data-id="${j.id}" title="${t('从第一段开始，走完整个旅程')}">${t('走一遍')}</button></div>`;
+    });
+    return html`<div class="kp-route-journeys">
       <div class="kp-route-sub">${t('跨宫殿旅程')}</div>
-      ${rows || `<div class="kp-route-stats">${t('还没有经过这座宫殿的旅程。把几座宫殿的路线串起来，一次回忆完一整门课。')}</div>`}
-      <div class="kp-route-pick"><select data-field="journeyAdd"><option value="">${t('把「{name}」加入旅程…', { name: escapeHtml(cur.name) })}</option>
-        ${all.map(j => `<option value="${escapeHtml(j.id)}">${escapeHtml(j.name)}${t('（{n} 段）', { n: j.legs.length })}</option>`).join('')}
+      ${rows.length ? rows : html`<div class="kp-route-stats">${t('还没有经过这座宫殿的旅程。把几座宫殿的路线串起来，一次回忆完一整门课。')}</div>`}
+      <div class="kp-route-pick"><select data-field="journeyAdd"><option value="">${t('把「{name}」加入旅程…', { name: cur.name })}</option>
+        ${all.map(j => html`<option value="${j.id}">${j.name}${t('（{n} 段）', { n: j.legs.length })}</option>`)}
         <option value="__new">${t('＋ 新建旅程')}</option></select></div>
     </div>`;
   }
@@ -401,7 +401,7 @@ export class RecallController {
     v.ui.loci.classList.add('kp-hidden');
     v.root.classList.remove('kp-route-picking');
     v.root.classList.add('kp-recalling');
-    v.ui.tip.style.opacity = '0';
+    v.ui.tip.classList.remove('kp-on');
     this.session = { route: label, stops, i: 0, revealed: false, hint: false, done: false, ratings: new Map() };
     // 键盘操作（空格揭晓、1–4 自评）要求焦点在视图上
     v.root.focus({ preventScroll: true });
@@ -569,7 +569,7 @@ export class RecallController {
     const v = this.v;
     v.root.classList.remove('kp-recalling');
     v.ui.recall.classList.add('kp-hidden');
-    v.ui.recall.innerHTML = '';
+    v.ui.recall.replaceChildren();
     v.select(null);
     this.redraw();
   }
@@ -582,14 +582,14 @@ export class RecallController {
     const n = run ? run.total : s.stops.length;
     if (s.legDone && run) {
       const next = run.legs[run.leg + 1];
-      el.innerHTML = `
-        <div class="kp-recall-top"><span>${t('{name} · 第 {i} / {n} 段走完了', { name: escapeHtml(run.journey.name), i: run.leg + 1, n: run.legs.length })}</span><button data-act="recallStop">×</button></div>
+      el.replaceChildren(html`
+        <div class="kp-recall-top"><span>${t('{name} · 第 {i} / {n} 段走完了', { name: run.journey.name, i: run.leg + 1, n: run.legs.length })}</span><button data-act="recallStop">×</button></div>
         <div class="kp-recall-bar"><i style="width:${(run.offsets[run.leg] + s.stops.length) / n * 100}%"></i></div>
         <div class="kp-recall-next"><small>${t('下一座宫殿')}</small><b></b><span></span></div>
         <div class="kp-recall-actions">
           <button data-act="recallStop">${t('先到这里')}</button>
           <button class="kp-primary kp-grow" data-act="recallNextLeg">${t('前往')} <kbd>${t('空格')}</kbd></button>
-        </div>`;
+        </div>`);
       el.querySelector('.kp-recall-next b').textContent = next.name;
       el.querySelector('.kp-recall-next span').textContent = `${next.routeName} · ${t('{n} 站', { n: next.keys.length })}`;
       return;
@@ -599,14 +599,14 @@ export class RecallController {
       const counts = RATINGS.map(([r, label, cls]) => [t(label), cls, [...all.values()].filter(x => x === r).length] as const);
       const weak = [...all.values()].filter(x => x && x <= 2).length;
       const skipped = n - [...all.values()].filter(Boolean).length;
-      el.innerHTML = `
-        <div class="kp-recall-top"><span>${t('{name} · 走完了', { name: escapeHtml(run ? run.journey.name : s.route) })}</span><button data-act="recallStop">×</button></div>
-        <div class="kp-recall-done">${t('<b>{n}</b> 站回忆完毕', { n })}${run ? `<small>${t('{n} 座宫殿', { n: new Set(run.legs.map(l => l.palaceId)).size })}</small>` : ''}</div>
-        <div class="kp-recall-sum">${counts.map(([l, c, k]) => `<span class="kp-r-${c}">${l} <b>${k}</b></span>`).join('')}${skipped ? `<span>${t('跳过 <b>{n}</b>', { n: skipped })}</span>` : ''}</div>
+      el.replaceChildren(html`
+        <div class="kp-recall-top"><span>${t('{name} · 走完了', { name: run ? run.journey.name : s.route })}</span><button data-act="recallStop">×</button></div>
+        <div class="kp-recall-done">${rich(t('<b>{n}</b> 站回忆完毕', { n }))}${run ? html`<small>${t('{n} 座宫殿', { n: new Set(run.legs.map(l => l.palaceId)).size })}</small>` : ''}</div>
+        <div class="kp-recall-sum">${counts.map(([l, c, k]) => html`<span class="kp-r-${c}">${l} <b>${k}</b></span>`)}${skipped ? html`<span>${rich(t('跳过 <b>{n}</b>', { n: skipped }))}</span>` : ''}</div>
         <div class="kp-recall-actions">
-          ${weak ? `<button data-act="recallAgain">${t('再练一遍没记住的 · {n}', { n: weak })}</button>` : ''}
+          ${weak ? html`<button data-act="recallAgain">${t('再练一遍没记住的 · {n}', { n: weak })}</button>` : ''}
           <button class="kp-primary" data-act="recallStop">${t('完成')}</button>
-        </div>`;
+        </div>`);
       return;
     }
     const stop = s.stops[s.i];
@@ -614,30 +614,30 @@ export class RecallController {
     const room = this.v.built?.roomOf(stop.item.room)?.name || '';
     const k = (run ? run.offsets[run.leg] : 0) + s.i;
     const label = run ? `${run.journey.name} · ${run.legs[run.leg].name}` : s.route;
-    const top = `<div class="kp-recall-top"><span>${t('{name} · 第 {i} / {n} 站', { name: escapeHtml(label), i: k + 1, n })}</span><button data-act="recallStop" title="${t('结束回忆（Esc）')}">×</button></div>
+    const top = html`<div class="kp-recall-top"><span>${t('{name} · 第 {i} / {n} 站', { name: label, i: k + 1, n })}</span><button data-act="recallStop" title="${t('结束回忆（Esc）')}">×</button></div>
       <div class="kp-recall-bar"><i style="width:${(k / n) * 100}%"></i></div>
-      <div class="kp-recall-where"><small>${escapeHtml(room)}</small><b></b></div>`;
+      <div class="kp-recall-where"><small>${room}</small><b></b></div>`;
     const b = stop.binding;
     if (!s.revealed) {
       // 有配图时可以先看图提示（不看文字）
-      el.innerHTML = `${top}
+      el.replaceChildren(html`${top}
         <div class="kp-recall-q">${t('这里放着什么？先在心里说出来，再揭晓。')}</div>
-        ${s.hint && b?.image ? '<img class="kp-recall-img" alt="">' : ''}
+        ${s.hint && b?.image ? html`<img class="kp-recall-img" alt="">` : ''}
         <div class="kp-recall-actions">
-          <button data-act="recallPrev"${s.i ? '' : ' disabled'}>${t('上一站')}</button>
-          ${b?.image && !s.hint ? `<button data-act="recallHint" title="${t('先看配图，不看文字')}">${t('看图提示')}</button>` : `<button data-act="recallSkip">${t('跳过')}</button>`}
+          <button data-act="recallPrev" ${s.i ? '' : 'disabled'}>${t('上一站')}</button>
+          ${b?.image && !s.hint ? html`<button data-act="recallHint" title="${t('先看配图，不看文字')}">${t('看图提示')}</button>` : html`<button data-act="recallSkip">${t('跳过')}</button>`}
           <button class="kp-primary kp-grow" data-act="recallReveal">${t('揭晓')} <kbd>${t('空格')}</kbd></button>
-        </div>`;
+        </div>`);
     } else {
       const local = this.v.isLocalNote(b);
       const canOpen = !!this.v.host.openBlock && local, canRender = !!this.v.host.renderBlock && local;
-      el.innerHTML = `${top}
+      el.replaceChildren(html`${top}
         <div class="kp-recall-answer">
-          <div class="kp-recall-title"><b></b>${canOpen ? `<button data-act="recallOpen" title="${t('在右侧打开笔记')}">${t('打开笔记')}</button>` : ''}</div>
-          ${b?.story || b?.image ? `<div class="kp-recall-story">${b.image ? '<img class="kp-recall-img" alt="">' : ''}${b.story ? '<p></p>' : ''}</div>` : ''}
-          ${canRender ? '<div class="kp-recall-note"></div>' : ''}
+          <div class="kp-recall-title"><b></b>${canOpen ? html`<button data-act="recallOpen" title="${t('在右侧打开笔记')}">${t('打开笔记')}</button>` : ''}</div>
+          ${b?.story || b?.image ? html`<div class="kp-recall-story">${b.image ? html`<img class="kp-recall-img" alt="">` : ''}${b.story ? html`<p></p>` : ''}</div>` : ''}
+          ${canRender ? html`<div class="kp-recall-note"></div>` : ''}
         </div>
-        <div class="kp-rate">${RATINGS.map(([r, label, cls]) => `<button class="kp-r-${cls}" data-act="recallRate" data-rate="${r}">${t(label)}<kbd>${r}</kbd></button>`).join('')}</div>`;
+        <div class="kp-rate">${RATINGS.map(([r, label, cls]) => html`<button class="kp-r-${cls}" data-act="recallRate" data-rate="${r}">${t(label)}<kbd>${r}</kbd></button>`)}</div>`);
       el.querySelector('.kp-recall-title b').textContent = b?.title || b?.blockId || '';
       const p = el.querySelector('.kp-recall-story p');
       if (p) p.textContent = b.story;

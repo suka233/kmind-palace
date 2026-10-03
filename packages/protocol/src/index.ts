@@ -166,7 +166,7 @@ export interface Peer extends UserBrief { look: PetLook; state: PeerState | null
 
 export const roomClientMsg = z.discriminatedUnion('t', [
   z.object({ t: z.literal('hello'), look: petInput.shape.look }),
-  z.object({ t: z.literal('state'), p: z.tuple([z.number().finite(), z.number().finite()]), yaw: z.number().finite(), anim: z.enum(['idle', 'walk', 'wave', 'sit']) }),
+  z.object({ t: z.literal('state'), p: z.tuple([z.number(), z.number()]), yaw: z.number(), anim: z.enum(['idle', 'walk', 'wave', 'sit']) }),
   z.object({ t: z.literal('emote'), e: z.enum(['wave', 'heart', 'laugh', 'clap', 'question', 'idea']) }),
   z.object({ t: z.literal('chat'), text: z.string().trim().min(1).max(LIMITS.chatMax) }),
   /** 主人带大家走路线：第几站（-1 结束） */

@@ -7,9 +7,11 @@ export type Species = 'owl' | 'cat' | 'fox' | 'bear' | 'rabbit';
 export type Accessory = 'party' | 'tophat' | 'crown' | 'scarf' | 'glasses' | 'bow' | 'backpack';
 
 export interface Look {
-  species: Species | string;
+  /** 一般是 Species；更新版本的插件可能加了新物种，所以按字符串存 */
+  species: string;
   colors?: { body?: string; belly?: string; accent?: string };
-  accessories?: (Accessory | string)[];
+  /** 一般是 Accessory，理由同上 */
+  accessories?: string[];
 }
 
 export const SPECIES: { id: Species; name: string; colors: { body: string; belly: string; accent: string } }[] = [

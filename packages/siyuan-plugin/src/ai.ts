@@ -135,7 +135,7 @@ export class AiService {
     const select = (key: keyof AiConfig, options: [string, string][]) => {
       const el = document.createElement('select');
       el.className = 'b3-select fn__flex-center fn__size200';
-      el.innerHTML = options.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+      el.replaceChildren(...options.map(([v, l]) => new Option(l, v)));
       el.value = String(this.config[key]);
       els[key] = el;
       return el;
@@ -143,7 +143,7 @@ export class AiService {
     const setting = new Setting({
       confirmCallback: () => {
         const c = this.config as any;
-        for (const [k, el] of Object.entries(els)) c[k] = el.type === 'checkbox' ? (el as HTMLInputElement).checked : el.value.trim();
+        for (const [k, el] of Object.entries(els)) c[k] = el.type === 'checkbox' ? (el).checked : el.value.trim();
         void this.save().then(() => showMessage(i18n('aiSaved')));
       },
     });
@@ -174,11 +174,11 @@ export class AiService {
         const b = document.createElement('button');
         b.className = 'b3-button b3-button--outline fn__flex-center fn__size200';
         b.textContent = i18n('aiTestBtn');
-        b.addEventListener('click', async () => {
+        b.addEventListener('click', () => void (async () => {
           // 用面板上还没保存的值测试
           const saved = this.config;
           const c: any = { ...saved };
-          for (const [k, el] of Object.entries(els)) c[k] = el.type === 'checkbox' ? (el as HTMLInputElement).checked : el.value.trim();
+          for (const [k, el] of Object.entries(els)) c[k] = el.type === 'checkbox' ? (el).checked : el.value.trim();
           this.config = c;
           b.disabled = true;
           try {
@@ -190,7 +190,7 @@ export class AiService {
             this.config = saved;
             b.disabled = false;
           }
-        });
+        })());
         return b;
       },
     });

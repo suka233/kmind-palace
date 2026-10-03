@@ -27,6 +27,7 @@ const CSS = /* i18n-ignore：只有 CSS 注释含中文 */ `
 }
 .kp-root button { all: unset; cursor: pointer; box-sizing: border-box; }
 .kp-root svg.kp-i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.kp-root svg.kp-i.kp-i-sm { width: 14px; height: 14px; }
 
 .kp-brand { position: absolute; left: 14px; top: 12px; display: flex; align-items: center; gap: 11px; padding: 8px 10px 8px 10px; border-radius: 15px; max-width: calc(100% - 28px); }
 .kp-brand .kp-mark { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; background: var(--kp-primary-bg); color: var(--kp-primary-fg); flex: none; }
@@ -61,6 +62,7 @@ const CSS = /* i18n-ignore：只有 CSS 注释含中文 */ `
 .kp-night .kp-room-label { background: rgba(30, 30, 40, .78); color: #eee4d6; }
 
 .kp-tip { position: absolute; left: 0; top: 0; pointer-events: none; padding: 6px 11px; border-radius: 10px; background: rgba(38, 33, 29, .92); color: #fff8ee; font-size: 12px; opacity: 0; transition: opacity .15s; white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; z-index: 3; }
+.kp-tip.kp-on { opacity: 1; }
 .kp-tip small { color: #cbbba8; margin-left: 6px; }
 .kp-tip .kp-bound { display: block; color: #ffc48f; margin-top: 2px; }
 
@@ -96,6 +98,12 @@ const CSS = /* i18n-ignore：只有 CSS 注释含中文 */ `
 .kp-root .kp-focus.kp-hidden { display: none !important; }
 
 .kp-fade { position: absolute; inset: 0; background: var(--kp-fade); opacity: 0; pointer-events: none; transition: opacity .35s ease; z-index: 5; }
+.kp-fade.kp-on { opacity: 1; }
+.kp-root canvas.kp-canvas { width: 100%; height: 100%; }
+.kp-root canvas[data-kp-cursor="pointer"] { cursor: pointer; }
+.kp-root canvas[data-kp-cursor="grab"] { cursor: grab; }
+.kp-root canvas[data-kp-cursor="grabbing"] { cursor: grabbing; }
+.kp-root .kp-behind { visibility: hidden; }
 .kp-loading { position: absolute; inset: 0; display: grid; place-items: center; background: #efe7dc; color: #7a6d60; font-size: 13px; letter-spacing: .2em; transition: opacity .8s ease; z-index: 6; }
 .kp-loading.kp-done { opacity: 0; pointer-events: none; }
 
@@ -676,3 +684,6 @@ export function ensureStyles(doc: Document = document) {
   }
   if (s.textContent !== CSS) s.textContent = CSS;
 }
+
+/** 全部样式（Obsidian 构建时写进 styles.css，不在运行时插 <style>） */
+export { CSS as PALACE_CSS };

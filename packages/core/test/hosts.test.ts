@@ -4,6 +4,9 @@ import { scheduleCard, createLocalReview, retrievability, type LocalCards } from
 import { PalaceStore, type StorageAdapter } from '../src/store';
 import { createOpenAiAdapter, OPENAI_DEFAULTS, type HttpPost } from '../src/openai';
 
+// 存储的防抖用 window.setTimeout（Obsidian 的弹出窗口要求）；Node 里没有 window
+(globalThis as { window?: unknown }).window ??= globalThis;
+
 const MIN = 60e3, DAY = 86400e3;
 
 describe('本地闪卡（FSRS）', () => {

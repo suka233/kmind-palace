@@ -2,6 +2,7 @@
 export const social: Record<string, string> = {
   // ---------------- 串门服务的客户端（social/api.ts） ----------------
   '连不上串门服务器，请检查网络或服务器地址': "Can't reach the visiting server. Check your network or the server address.",
+  '出错了': 'Something went wrong',
   '创建账号失败': "Couldn't create an account",
   '配对码无效或已过期（10 分钟内有效，只能用一次）': 'Invalid or expired pairing code (valid for 10 minutes, single use)',
 

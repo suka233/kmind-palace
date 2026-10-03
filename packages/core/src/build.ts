@@ -9,6 +9,7 @@ import { seedFromString } from './random';
 import { palaceLot } from './world';
 import { mergeInPlace } from './merge';
 import { t } from './i18n';
+import { html } from './dom';
 
 /* =====================================================================
  * 把一份 PalaceDoc 变成 three.js 场景（与视图 / 宿主无关）。
@@ -127,7 +128,7 @@ export function buildStructure(b: BuiltPalace, doc: PalaceDoc, K: Kit) {
     if (r.label !== null) {
       const el = document.createElement('div');
       el.className = 'kp-room-label';
-      el.innerHTML = `${escapeHtml(r.name)}${r.en ? `<small>${escapeHtml(r.en)}</small>` : ''}`;
+      el.replaceChildren(html`${r.name}${r.en ? html`<small>${r.en}</small>` : ''}`);
       const lab = new CSS2DObject(el);
       const [lx, lz] = r.label || [x0 + w / 2, z0 + d / 2];
       lab.position.set(lx, .05, lz);
@@ -391,8 +392,4 @@ export function rectArea(r: Rect) {
 
 function area(r: PalaceRoom) {
   return rectArea(r.rect);
-}
-
-function escapeHtml(s: string) {
-  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }

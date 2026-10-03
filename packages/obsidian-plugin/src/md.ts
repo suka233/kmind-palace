@@ -95,7 +95,7 @@ export function sectionText(content: string, id: NoteId): string | null {
 export function shortTitle(md: string, max = 40) {
   const first = md.split('\n').map(l => l.trim()).find(Boolean) || '';
   const t = first.replace(/^(#{1,6}|>|[-*+]|\d+[.)])\s+/, '').replace(/^\[[ xX]\]\s+/, '')
-    .replace(/!?\[\[([^\]|]+)(\|([^\]]+))?\]\]/g, (_, a, __, b) => b || a).replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/!?\[\[([^\]|]+)(\|([^\]]+))?\]\]/g, (_: string, a: string, __: string, b: string | undefined) => b || a).replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
     .replace(/[*_`~=]/g, '').trim();
   return t.length > max ? t.slice(0, max) + '…' : t;
 }

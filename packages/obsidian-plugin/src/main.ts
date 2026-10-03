@@ -1,13 +1,6 @@
-import * as obsidian from 'obsidian';
-import { Plugin, ItemView, Notice, Platform, TFile, addIcon, debounce, requestUrl, type WorkspaceLeaf, type ViewStateResult, type HoverPopover, type EventRef } from 'obsidian';
+import { Plugin, ItemView, Notice, Platform, getLanguage, TFile, addIcon, debounce, requestUrl, type WorkspaceLeaf, type ViewStateResult, type HoverPopover, type EventRef } from 'obsidian';
 import { PalaceView, PalaceStore, setLocale, t, createLocalReview, createOpenAiAdapter, remapNoteIds, type HostAdapter, type LocalReview, type PalaceDoc, type PalaceWorld, type SocialAccount } from '@kmind-palace/core';
 
-/** Obsidian 的界面语言：1.8 起有 getLanguage()，更早的版本存在 localStorage 的 language 里（没有就是英文） */
-function obsidianLang(): string {
-  const get = (obsidian as { getLanguage?: () => string }).getLanguage;
-  if (typeof get === 'function') return get();
-  try { return window.localStorage.getItem('language') || 'en'; } catch { return 'en'; }
-}
 import { VaultData } from './storage';
 import { DEFAULT_SETTINGS, PalaceSettingTab, SOCIAL_ENABLED, type Settings } from './settings';
 import { pickBlock, getBlockRef, getBlockText, renderBlock, writeStory, listDocs, pickDocSource, fileOf } from './notes';
@@ -39,8 +32,9 @@ class PalaceLeafView extends ItemView {
   getIcon() { return ICON; }
   getState() { return { ...super.getState(), palaceId: this.palaceId }; }
 
-  async setState(state: any, result: ViewStateResult) {
-    const id = typeof state?.palaceId === 'string' ? state.palaceId : null;
+  async setState(state: unknown, result: ViewStateResult) {
+    const raw = (state as { palaceId?: unknown } | null)?.palaceId;
+    const id = typeof raw === 'string' ? raw : null;
     if (id && this.palace && id !== this.palaceId) this.palace.enterPalace(id);
     else if (!this.palace) this.palaceId = id;
     await super.setState(state, result);
@@ -56,7 +50,7 @@ class PalaceLeafView extends ItemView {
       const { world, docs, lastOpened } = await this.plugin.store.loadAll();
       if (!el.isConnected) return;
       const host = el.createDiv({ cls: 'kmind-palace-host' });
-      this.palace = new PalaceView(host, { world, docs, host: this.plugin.createHost(this), enter: this.palaceId || lastOpened });
+      this.palace = new PalaceView(host, { world, docs, host: this.plugin.createHost(this), enter: this.palaceId || lastOpened, injectStyles: false });
     } catch (e) {
       el.createDiv({ cls: 'kmind-palace-error', text: t('思维宫殿加载失败：{msg}', { msg: String((e as Error)?.message || e) }) });
     }
@@ -74,7 +68,7 @@ class PalaceLeafView extends ItemView {
   setLocation(id: string | null, name: string) {
     this.palaceId = id;
     this.title = id ? `${name} · ${title()}` : title();
-    (this.leaf as any).updateHeader?.();
+    (this.leaf as WorkspaceLeaf & { updateHeader?: () => void }).updateHeader?.();
     this.app.workspace.requestSaveLayout();
   }
 
@@ -86,7 +80,7 @@ class PalaceLeafView extends ItemView {
     const a = this.anchor ||= this.makeAnchor();
     a.style.left = `${at.x - 14}px`;
     a.style.top = `${at.y - 14}px`;
-    a.style.display = '';
+    a.show();
     this.app.workspace.trigger('hover-link', {
       event: new MouseEvent('mouseover', { clientX: at.x, clientY: at.y }),
       source: VIEW_TYPE, hoverParent: this, targetEl: a, linktext: id, sourcePath: '',
@@ -94,28 +88,28 @@ class PalaceLeafView extends ItemView {
     let seen = false;
     const timer = window.setInterval(() => {
       if (this.hoverPopover) { seen = true; return; }
-      if (seen || a.style.display === 'none') { a.style.display = 'none'; window.clearInterval(timer); }
+      if (seen || !a.isShown()) { a.hide(); window.clearInterval(timer); }
     }, 300);
-    window.setTimeout(() => { if (!seen) { a.style.display = 'none'; window.clearInterval(timer); } }, 3000);
+    window.setTimeout(() => { if (!seen) { a.hide(); window.clearInterval(timer); } }, 3000);
   }
 
   private makeAnchor() {
     const a = document.body.createDiv({ cls: 'kmind-palace-anchor' });
     const pass = (e: Event) => {
       const p = e as PointerEvent;
-      a.style.display = 'none';
+      a.hide();
       const under = document.elementFromPoint(p.clientX, p.clientY);
       if (under) under.dispatchEvent(new (e.constructor as typeof PointerEvent)(e.type, p));
       e.preventDefault();
     };
     a.addEventListener('pointerdown', pass);
     a.addEventListener('wheel', pass, { passive: false });
-    a.addEventListener('pointerleave', () => window.setTimeout(() => { if (!this.hoverPopover) a.style.display = 'none'; }, 400));
+    a.addEventListener('pointerleave', () => window.setTimeout(() => { if (!this.hoverPopover) a.hide(); }, 400));
     return a;
   }
 }
 
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+const sleep = (ms: number) => new Promise(r => window.setTimeout(r, ms));
 
 export default class KMindPalacePlugin extends Plugin {
   settings!: Settings;
@@ -126,7 +120,7 @@ export default class KMindPalacePlugin extends Plugin {
   private renames: [string, string][] = [];
 
   async onload() {
-    setLocale(obsidianLang());
+    setLocale(getLanguage());
     await this.loadSettings();
     this.data = new VaultData(this.app, () => this.settings.dataFolder);
     this.store = new PalaceStore(this.data.storage(), (msg) => new Notice(t('思维宫殿：{msg}', { msg }), 8000));
@@ -164,8 +158,8 @@ export default class KMindPalacePlugin extends Plugin {
     });
   }
 
-  async onunload() {
-    await this.store.flush();
+  onunload() {
+    void this.store.flush();
     this.data.dispose();
   }
 
@@ -248,14 +242,21 @@ export default class KMindPalacePlugin extends Plugin {
       },
       // 不带库名：同一个库在不同设备上的文件夹名可能不一样
       noteSource: 'obsidian',
-      locale: obsidianLang(),
+      locale: getLanguage(),
+      isMobile: Platform.isMobile,
+      // 界面偏好（画质、看过的提示）：按库分开存在本机
+      prefs: {
+        get: (key) => { const v: unknown = app.loadLocalStorage(key); return typeof v === 'string' ? v : null; },
+        set: (key, value) => app.saveLocalStorage(key, value),
+      },
       saveMedia: (blob, id) => this.data.saveMedia(blob, id),
       loadMedia: (id) => this.data.loadMedia(id),
       ai: this.ai,
       getBlockText: (id) => getBlockText(app, id),
       writeStory: (opts) => writeStory(app, opts, (id) => this.data.mediaBlob(id)),
       openSettings: () => {
-        const s = (app as any).setting;
+        // 设置面板没有公开的 API：有就打开到本插件的页面
+        const s = (app as typeof app & { setting?: { open(): void; openTabById(id: string): void } }).setting;
         s?.open();
         s?.openTabById(this.manifest.id);
       },
@@ -270,7 +271,7 @@ export default class KMindPalacePlugin extends Plugin {
   }
 
   async loadSettings() {
-    const raw = (await this.loadData()) || {};
+    const raw = ((await this.loadData()) ?? {}) as Partial<Settings>;
     this.settings = { ...DEFAULT_SETTINGS, ...raw, ai: { ...DEFAULT_SETTINGS.ai, ...(raw.ai || {}) } };
   }
 

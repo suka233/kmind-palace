@@ -5,6 +5,7 @@ import { boundLoci, normalizePalace } from '../schema';
 import { normalizeWorld, createWorld, type PalaceWorld } from '../world';
 import { SocialApi, ApiError, type SocialAccount } from './api';
 import { ICONS, escapeHtml, timeAgo } from '../icons';
+import { html, rich } from '../dom';
 import { RoomController } from './room';
 import { catalogName } from '../catalog';
 import { t, tc } from '../i18n';
@@ -34,11 +35,13 @@ export class SocialController {
   panelOpen = false;
   private guestOpen = false;
   private guestbook: GuestbookEntry[] = [];
+  /** 留言板里正在写举报理由（Electron 里没有 prompt()，就地写） */
+  private reporting = false;
   private guestPalace: string | null = null;
   private pairCode: { code: string; until: number } | null = null;
   private redeemOpen = false;
   private confirmRemove: string | null = null;
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: number | null = null;
   private loaded = false;
   /** 实时房间（S2） */
   room: RoomController;
@@ -46,7 +49,7 @@ export class SocialController {
   petInfo: PetInfo | null = null;
   petTrips: PetTrip[] = [];
   guestPets: GuestPet[] = [];
-  private petSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  private petSaveTimer: number | null = null;
   private seenNotes = new Set<string>();
 
   constructor(private v: PalaceView) {
@@ -67,7 +70,7 @@ export class SocialController {
     this.loaded = true;
     this.updateButton();
     if (this.account) void this.refresh();
-    this.timer = setInterval(() => { if (!document.hidden && this.account) void this.refreshInbox(); }, POLL_MS);
+    this.timer = window.setInterval(() => { if (!document.hidden && this.account) void this.refreshInbox(); }, POLL_MS);
   }
 
   /** 服务器地址可能在设置里改了 */
@@ -81,7 +84,7 @@ export class SocialController {
     });
   }
 
-  dispose() { if (this.timer) clearInterval(this.timer); if (this.petSaveTimer) clearTimeout(this.petSaveTimer); this.room.dispose(); }
+  dispose() { if (this.timer) window.clearInterval(this.timer); if (this.petSaveTimer) window.clearTimeout(this.petSaveTimer); this.room.dispose(); }
 
   /** 该不该连实时房间：在发布了的自己的宫殿里，或者在参观的好友宫殿里 */
   syncRoom() {
@@ -106,7 +109,7 @@ export class SocialController {
     const err = e as ApiError;
     if (err?.status === 401 && this.account) {
       this.v.host.notify?.(t('串门账号已失效（可能在别处退出或被封禁）。可以在「好友」里重新开始，或用配对码登录原来的账号'), 'error');
-    } else this.v.host.notify?.(err?.message || String(e), 'error');
+    } else this.v.host.notify?.(err?.message || (typeof e === 'string' ? e : t('出错了')), 'error');
   }
 
   async refresh() {
@@ -156,9 +159,9 @@ export class SocialController {
 
   private buildUI() {
     const v = this.v;
-    v.root.querySelector('.kp-topright')?.insertAdjacentHTML('afterbegin',
-      `<button class="kp-friends-btn kp-glass kp-hidden" data-act="socOpen" data-ref="socBtn" title="${t('好友：加好友、去好友的宫殿串门')}">${ICONS.users}<span>${t('好友')}</span><i class="kp-badge kp-hidden" data-ref="socBadge"></i></button>`);
-    v.root.insertAdjacentHTML('beforeend', `
+    v.root.querySelector('.kp-topright')?.prepend(
+      html`<button class="kp-friends-btn kp-glass kp-hidden" data-act="socOpen" data-ref="socBtn" title="${t('好友：加好友、去好友的宫殿串门')}">${rich(ICONS.users)}<span>${t('好友')}</span><i class="kp-badge kp-hidden" data-ref="socBadge"></i></button>`);
+    v.root.append(html`
       <div class="kp-routes kp-social kp-glass kp-hidden kp-iso-only" data-ref="socPanel"></div>
       <div class="kp-routes kp-guestbook kp-glass kp-hidden kp-palace-only kp-iso-only" data-ref="guestPanel"></div>
       <div class="kp-visit-bar kp-glass kp-hidden" data-ref="visitBar"></div>`);
@@ -192,52 +195,52 @@ export class SocialController {
   render() {
     if (!this.panelOpen) return;
     const el = this.v.ui.socPanel;
-    const head = `<div class="kp-routes-head"><b>${t('好友 · 串门')}</b><button class="kp-close" data-act="socClose">×</button></div>`;
+    const head = html`<div class="kp-routes-head"><b>${t('好友 · 串门')}</b><button class="kp-close" data-act="socClose">×</button></div>`;
     if (!this.enabled) {
-      el.innerHTML = `${head}<div class="kp-empty">${t('还没有配置串门服务器。')}${this.v.host.openSettings ? t('在插件设置里填写服务器地址后就能加好友、互相参观宫殿。') : ''}</div>
-        ${this.v.host.openSettings ? `<div class="kp-route-go"><button data-act="socSettings">${t('打开设置')}</button></div>` : ''}`;
+      el.replaceChildren(html`${head}<div class="kp-empty">${t('还没有配置串门服务器。')}${this.v.host.openSettings ? t('在插件设置里填写服务器地址后就能加好友、互相参观宫殿。') : ''}</div>
+        ${this.v.host.openSettings ? html`<div class="kp-route-go"><button data-act="socSettings">${t('打开设置')}</button></div>` : ''}`);
       return;
     }
     if (!this.account) {
-      el.innerHTML = `${head}
+      el.replaceChildren(html`${head}
         <div class="kp-empty">${t('加好友、去好友的宫殿串门、在信箱里留言。')}<br>${t('会自动给你建一个匿名账号（不用邮箱、手机号）；笔记本身永远不会上传，只有你主动发布的宫殿（和你标了「公开」的记忆桩）会给好友看到。')}</div>
-        <div class="kp-route-go"><button class="kp-primary" data-act="socStart"${this.busy ? ' disabled' : ''}>${this.busy || t('开始使用')}</button><button data-act="socRedeemOpen">${t('我有配对码')}</button></div>
-        ${this.redeemOpen ? this.redeemForm() : ''}`;
+        <div class="kp-route-go"><button class="kp-primary" data-act="socStart" ${this.busy ? 'disabled' : ''}>${this.busy || t('开始使用')}</button><button data-act="socRedeemOpen">${t('我有配对码')}</button></div>
+        ${this.redeemOpen ? this.redeemForm() : ''}`);
       return;
     }
     const me = this.me;
     const typeText = (n: Notification) => this.notificationText(n);
-    el.innerHTML = `${head}
+    el.replaceChildren(html`${head}
       <div class="kp-soc-me">
         <input class="kp-route-name" data-field="socName" maxlength="20" spellcheck="false" placeholder="${t('你的名字')}">
-        <div class="kp-soc-code"><span>${t('我的好友码')}</span><b>${escapeHtml(me?.friendCode || '…')}</b>
+        <div class="kp-soc-code"><span>${t('我的好友码')}</span><b>${me?.friendCode || '…'}</b>
           <button data-act="socCopyCode" title="${t('复制好友码')}">${tc('clipboard', '复制')}</button><button data-act="socRotate" title="${t('换一个好友码（旧的失效）')}">${t('换一个')}</button></div>
       </div>
-      ${me?.announcement ? `<div class="kp-soc-ann">📢 ${escapeHtml(me.announcement)}</div>` : ''}
+      ${me?.announcement ? html`<div class="kp-soc-ann">📢 ${me.announcement}</div>` : ''}
       <div class="kp-route-pick"><input class="kp-route-name" data-field="socCode" placeholder="${t('输入好友码，例如 7F3K-9QXA')}" spellcheck="false"><button data-act="socAdd">${t('加好友')}</button></div>
-      ${this.requests.length ? `<div class="kp-route-sub">${t('好友请求')}</div>${this.requests.map(r => `
-        <div class="kp-journey-row"><span><b>${escapeHtml(r.from.name)}</b><small>${escapeHtml(timeAgo(Date.parse(r.createdAt)))}</small></span>
-          <button data-act="socAccept" data-id="${escapeHtml(r.id)}">${t('同意')}</button><button class="kp-soc-ghost" data-act="socDecline" data-id="${escapeHtml(r.id)}">${t('拒绝')}</button></div>`).join('')}` : ''}
+      ${this.requests.length ? html`<div class="kp-route-sub">${t('好友请求')}</div>${this.requests.map(r => html`
+        <div class="kp-journey-row"><span><b>${r.from.name}</b><small>${timeAgo(Date.parse(r.createdAt))}</small></span>
+          <button data-act="socAccept" data-id="${r.id}">${t('同意')}</button><button class="kp-soc-ghost" data-act="socDecline" data-id="${r.id}">${t('拒绝')}</button></div>`)}` : ''}
       <div class="kp-route-sub">${t('好友 · {n}', { n: this.friends.length })}</div>
-      ${this.friends.length ? this.friends.map(f => `
-        <div class="kp-journey-row"><span><b>${escapeHtml(f.name)}</b><small>${f.palaces ? t('发布了 {n} 座宫殿', { n: f.palaces }) : t('还没有发布宫殿')}</small></span>
-          ${f.palaces ? `<button data-act="socVisit" data-id="${escapeHtml(f.id)}">${t('去串门')}</button>` : ''}
-          <button class="kp-soc-ghost" data-act="socRemove" data-id="${escapeHtml(f.id)}">${this.confirmRemove === f.id ? t('确认删除') : t('删除')}</button></div>`).join('')
-        : `<div class="kp-route-stats">${t('把你的好友码发给朋友，或者输入朋友的好友码。')}</div>`}
+      ${this.friends.length ? this.friends.map(f => html`
+        <div class="kp-journey-row"><span><b>${f.name}</b><small>${f.palaces ? t('发布了 {n} 座宫殿', { n: f.palaces }) : t('还没有发布宫殿')}</small></span>
+          ${f.palaces ? html`<button data-act="socVisit" data-id="${f.id}">${t('去串门')}</button>` : ''}
+          <button class="kp-soc-ghost" data-act="socRemove" data-id="${f.id}">${this.confirmRemove === f.id ? t('确认删除') : t('删除')}</button></div>`)
+        : html`<div class="kp-route-stats">${t('把你的好友码发给朋友，或者输入朋友的好友码。')}</div>`}
       ${this.v.visiting ? '' : this.myPalacesSection()}
       ${this.petSection()}
-      <div class="kp-route-sub">${t('消息')}${this.inbox.unread ? ` · <b class="kp-m-due">${t('{n} 条新消息', { n: this.inbox.unread })}</b>` : ''}${this.inbox.unread ? ` <button class="kp-soc-link" data-act="socRead">${t('全部已读')}</button>` : ''}</div>
-      <div class="kp-soc-inbox">${this.inbox.items.length ? this.inbox.items.slice(0, 20).map(n => `<div class="kp-soc-note${n.read ? '' : ' kp-unread'}"><span></span><small>${escapeHtml(timeAgo(Date.parse(n.createdAt)))}</small></div>`).join('') : `<div class="kp-route-stats">${t('还没有消息。')}</div>`}</div>
+      <div class="kp-route-sub">${t('消息')}${this.inbox.unread ? html` · <b class="kp-m-due">${t('{n} 条新消息', { n: this.inbox.unread })}</b>` : ''}${this.inbox.unread ? html` <button class="kp-soc-link" data-act="socRead">${t('全部已读')}</button>` : ''}</div>
+      <div class="kp-soc-inbox">${this.inbox.items.length ? this.inbox.items.slice(0, 20).map(n => html`<div class="kp-soc-note${n.read ? '' : ' kp-unread'}"><span></span><small>${timeAgo(Date.parse(n.createdAt))}</small></div>`) : html`<div class="kp-route-stats">${t('还没有消息。')}</div>`}</div>
       <div class="kp-route-sub">${t('其他设备')}</div>
-      ${this.pairCode && this.pairCode.until > Date.now() ? `<div class="kp-soc-pair">${t('在另一台设备的「好友 → 我有配对码」里输入')}<b>${escapeHtml(this.pairCode.code.replace(/(.{4})/, '$1 '))}</b><small>${t('10 分钟内有效，只能用一次')}</small></div>` : ''}
+      ${this.pairCode && this.pairCode.until > Date.now() ? html`<div class="kp-soc-pair">${t('在另一台设备的「好友 → 我有配对码」里输入')}<b>${this.pairCode.code.replace(/(.{4})/, '$1 ')}</b><small>${t('10 分钟内有效，只能用一次')}</small></div>` : ''}
       <div class="kp-route-tools"><button data-act="socPair">${t('在其他设备登录…')}</button><button data-act="socRedeemOpen">${t('我有配对码')}</button></div>
-      ${this.redeemOpen ? this.redeemForm() : ''}`;
+      ${this.redeemOpen ? this.redeemForm() : ''}`);
     (el.querySelector('[data-field="socName"]') as HTMLInputElement).value = me?.user.name || this.account.name || '';
     el.querySelectorAll<HTMLElement>('.kp-soc-note span').forEach((s, i) => { s.textContent = typeText(this.inbox.items[i]); });
   }
 
   private redeemForm() {
-    return `<div class="kp-soc-redeem"><div class="kp-route-stats">${t('输入另一台设备上显示的 8 位配对码。')}${this.account ? t('登录后这台设备会换成那个账号（当前账号的好友不会合并过来）。') : ''}</div>
+    return html`<div class="kp-soc-redeem"><div class="kp-route-stats">${t('输入另一台设备上显示的 8 位配对码。')}${this.account ? t('登录后这台设备会换成那个账号（当前账号的好友不会合并过来）。') : ''}</div>
       <div class="kp-route-pick"><input class="kp-route-name" data-field="socRedeem" maxlength="12" placeholder="${t('例如 7F3K 9QXA')}" spellcheck="false"><button class="kp-primary" data-act="socRedeem">${t('登录')}</button></div></div>`;
   }
 
@@ -264,53 +267,53 @@ export class SocialController {
   // =====================================================================
 
   /** 小镇宫殿卡片里的一节（自己的世界里才有） */
-  publishSection(doc: PalaceDoc): string {
-    if (!this.enabled || this.v.readonly) return '';
+  publishSection(doc: PalaceDoc): DocumentFragment {
+    if (!this.enabled || this.v.readonly) return html``;
     const p = this.published.get(doc.id);
     const shared = boundLoci(doc).filter(l => l.binding.share).length, total = boundLoci(doc).length;
-    const lociLine = `<div class="kp-note-sm">${total ? t('公开的记忆桩 {shared} / {total}：进宫殿点记忆桩，打开「公开给好友」才会带上它的标题和记忆故事。笔记本身不会上传。', { shared, total }) : t('公开的记忆桩 {shared} / {total}。笔记本身不会上传。', { shared, total })}</div>`;
-    if (!this.account) return `<div class="kp-subtitle">${t('分享给好友')}</div><div class="kp-note-sm">${t('在右上角「好友」里开始使用后，就能把宫殿发布给好友参观。')}</div>`;
+    const lociLine = html`<div class="kp-note-sm">${total ? t('公开的记忆桩 {shared} / {total}：进宫殿点记忆桩，打开「公开给好友」才会带上它的标题和记忆故事。笔记本身不会上传。', { shared, total }) : t('公开的记忆桩 {shared} / {total}。笔记本身不会上传。', { shared, total })}</div>`;
+    if (!this.account) return html`<div class="kp-subtitle">${t('分享给好友')}</div><div class="kp-note-sm">${t('在右上角「好友」里开始使用后，就能把宫殿发布给好友参观。')}</div>`;
     if (!p) {
-      return `<div class="kp-subtitle">${t('分享给好友')}</div>${lociLine}
-        <div class="kp-row"><button class="kp-primary" data-act="socPublish" data-id="${escapeHtml(doc.id)}"${this.busy ? ' disabled' : ''}>${this.busy === doc.id ? t('正在发布…') : t('发布给好友')}</button></div>`;
+      return html`<div class="kp-subtitle">${t('分享给好友')}</div>${lociLine}
+        <div class="kp-row"><button class="kp-primary" data-act="socPublish" data-id="${doc.id}" ${this.busy ? 'disabled' : ''}>${this.busy === doc.id ? t('正在发布…') : t('发布给好友')}</button></div>`;
     }
     const stale = doc.updatedAt > p.sourceUpdatedAt;
-    return `<div class="kp-subtitle">${t('分享给好友')}</div>
-      ${p.takenDown ? `<div class="kp-note-sm kp-soc-down">${p.takedownReason ? t('已被管理员下架：{reason}', { reason: escapeHtml(p.takedownReason) }) : t('已被管理员下架')}</div>` : ''}
-      <div class="kp-note-sm">${t('已发布')} · ${p.visibility === 'link' ? t('好友 + 凭链接') : t('只给好友')} · ${t('第 {v} 版', { v: p.version })} · ${t('{n} 次参观', { n: p.views })}${stale ? ` · <b class="kp-due-text">${t('有改动还没同步')}</b>` : ''}</div>
+    return html`<div class="kp-subtitle">${t('分享给好友')}</div>
+      ${p.takenDown ? html`<div class="kp-note-sm kp-soc-down">${p.takedownReason ? t('已被管理员下架：{reason}', { reason: p.takedownReason }) : t('已被管理员下架')}</div>` : ''}
+      <div class="kp-note-sm">${t('已发布')} · ${p.visibility === 'link' ? t('好友 + 凭链接') : t('只给好友')} · ${t('第 {v} 版', { v: p.version })} · ${t('{n} 次参观', { n: p.views })}${stale ? html` · <b class="kp-due-text">${t('有改动还没同步')}</b>` : ''}</div>
       ${lociLine}
-      <label class="kp-soc-opt"><input type="checkbox" data-field="socLink" data-id="${escapeHtml(doc.id)}"${p.visibility === 'link' ? ' checked' : ''}> ${t('允许凭链接访问（没装插件的人也能在网页上参观）')}</label>
-      <label class="kp-soc-opt"><input type="checkbox" data-field="socPhotos" data-id="${escapeHtml(doc.id)}"${p.photos ? ' checked' : ''}> ${t('带上自己的照片（画作、相框、海报、电视、配图）')}</label>
+      <label class="kp-soc-opt"><input type="checkbox" data-field="socLink" data-id="${doc.id}" ${p.visibility === 'link' ? 'checked' : ''}> ${t('允许凭链接访问（没装插件的人也能在网页上参观）')}</label>
+      <label class="kp-soc-opt"><input type="checkbox" data-field="socPhotos" data-id="${doc.id}" ${p.photos ? 'checked' : ''}> ${t('带上自己的照片（画作、相框、海报、电视、配图）')}</label>
       <div class="kp-row">
-        <button class="${stale ? 'kp-primary' : ''}" data-act="socPublish" data-id="${escapeHtml(doc.id)}"${this.busy ? ' disabled' : ''}>${this.busy === doc.id ? t('正在同步…') : stale ? t('同步改动') : t('重新发布')}</button>
-        ${p.visibility === 'link' ? `<button data-act="socCopyLink" data-id="${escapeHtml(doc.id)}">${t('复制链接')}</button>` : ''}
-        <button class="kp-danger" data-act="socUnpublish" data-id="${escapeHtml(doc.id)}">${t('撤下')}</button>
+        <button class="${stale ? 'kp-primary' : ''}" data-act="socPublish" data-id="${doc.id}" ${this.busy ? 'disabled' : ''}>${this.busy === doc.id ? t('正在同步…') : stale ? t('同步改动') : t('重新发布')}</button>
+        ${p.visibility === 'link' ? html`<button data-act="socCopyLink" data-id="${doc.id}">${t('复制链接')}</button>` : ''}
+        <button class="kp-danger" data-act="socUnpublish" data-id="${doc.id}">${t('撤下')}</button>
       </div>`;
   }
 
   /** 好友面板里的「我的宫殿」：一键发布 / 同步（更多选项在小镇的宫殿卡片上） */
-  private myPalacesSection(): string {
+  private myPalacesSection(): DocumentFragment | null {
     const docs = [...this.v.docs.values()];
-    if (!docs.length) return '';
+    if (!docs.length) return null;
     const rows = docs.map(d => {
       const p = this.published.get(d.id);
       const stale = !!p && d.updatedAt > p.sourceUpdatedAt;
       const state = !p ? t('还没发布') : p.takenDown ? t('已被管理员下架') : `${t('已发布')} · ${p.visibility === 'link' ? t('好友 + 链接') : t('只给好友')}${stale ? ' · ' + t('有改动没同步') : ''}`;
-      const id = escapeHtml(d.id);
-      const btn = this.busy === d.id ? `<button disabled>${t('正在发布…')}</button>`
-        : !p ? `<button data-act="socPublish" data-id="${id}"${this.busy ? ' disabled' : ''}>${t('发布')}</button>`
-        : stale ? `<button data-act="socPublish" data-id="${id}"${this.busy ? ' disabled' : ''}>${t('同步改动')}</button>`
-        : p.visibility === 'link' ? `<button class="kp-soc-ghost" data-act="socCopyLink" data-id="${id}">${t('复制链接')}</button>` : '';
-      return `<div class="kp-journey-row"><span><b>${escapeHtml(d.name)}</b><small>${state}</small></span>${btn}</div>`;
-    }).join('');
-    return `<div class="kp-route-sub">${t('我的宫殿 · 发布给好友')}</div>${rows}
+      const id = d.id;
+      const btn = this.busy === d.id ? html`<button disabled>${t('正在发布…')}</button>`
+        : !p ? html`<button data-act="socPublish" data-id="${id}" ${this.busy ? 'disabled' : ''}>${t('发布')}</button>`
+        : stale ? html`<button data-act="socPublish" data-id="${id}" ${this.busy ? 'disabled' : ''}>${t('同步改动')}</button>`
+        : p.visibility === 'link' ? html`<button class="kp-soc-ghost" data-act="socCopyLink" data-id="${id}">${t('复制链接')}</button>` : '';
+      return html`<div class="kp-journey-row"><span><b>${d.name}</b><small>${state}</small></span>${btn}</div>`;
+    });
+    return html`<div class="kp-route-sub">${t('我的宫殿 · 发布给好友')}</div>${rows}
       <div class="kp-route-stats">${t('发布后好友能来参观、留言，你们的小管家也能互相串门。凭链接访问、带照片、撤下在小镇里单击宫殿的卡片上设置。')}</div>`;
   }
 
   /** 宫殿里记忆桩卡片上的「公开给好友」开关 */
-  shareToggle(b: LocusBinding | null): string {
-    if (!this.enabled || this.v.readonly || !b?.blockId) return '';
-    return `<button class="kp-soc-share${b.share ? ' kp-on' : ''}" data-act="socShare" title="${t('公开后，发布这座宫殿时好友能看到这个记忆桩的标题和记忆故事（笔记本身不会上传）')}">${b.share ? '🔓 ' + t('已公开给好友') : '🔒 ' + t('只有自己看得到')}</button>`;
+  shareToggle(b: LocusBinding | null): DocumentFragment {
+    if (!this.enabled || this.v.readonly || !b?.blockId) return html``;
+    return html`<button class="kp-soc-share${b.share ? ' kp-on' : ''}" data-act="socShare" title="${t('公开后，发布这座宫殿时好友能看到这个记忆桩的标题和记忆故事（笔记本身不会上传）')}">${b.share ? '🔓 ' + t('已公开给好友') : '🔒 ' + t('只有自己看得到')}</button>`;
   }
 
   /** 宫殿标题栏的「留言」按钮：参观时，或者自己的宫殿已发布 */
@@ -357,7 +360,9 @@ export class SocialController {
       case 'guestClose': this.closeGuestbook(); break;
       case 'guestSend': void this.sendGuestbook(); break;
       case 'guestDelete': void this.run(async () => { await this.api.deleteGuestbook(id); await this.loadGuestbook(); }); break;
-      case 'guestReport': void this.report(); break;
+      case 'guestReport': this.reporting = true; this.renderGuestbook(); break;
+      case 'guestReportCancel': this.reporting = false; this.renderGuestbook(); break;
+      case 'guestReportSend': void this.report(); break;
     }
     return true;
   }
@@ -512,8 +517,8 @@ export class SocialController {
   onPetChanged() {
     this.room.hello();
     // 换装、改名：攒一会儿再同步到服务器
-    if (this.petSaveTimer) clearTimeout(this.petSaveTimer);
-    this.petSaveTimer = setTimeout(() => { this.petSaveTimer = null; void this.pushPet(); }, 1500);
+    if (this.petSaveTimer) window.clearTimeout(this.petSaveTimer);
+    this.petSaveTimer = window.setTimeout(() => { this.petSaveTimer = null; void this.pushPet(); }, 1500);
   }
 
   // =====================================================================
@@ -529,7 +534,7 @@ export class SocialController {
   private async pushPet() {
     if (!this.api || !this.account) return;
     const pet = this.v.companion.pet;
-    try { await this.api.savePet(pet.name, pet.look as any); } catch { /* 下次改动时再同步 */ }
+    try { await this.api.savePet(pet.name, pet.look); } catch { /* 下次改动时再同步 */ }
   }
 
   /** 拉一次宠物状态；sync 时把本机的外观推上去（本机为准） */
@@ -568,17 +573,17 @@ export class SocialController {
   }
 
   /** 小管家面板里的「出门」一节 */
-  petSection(): string {
-    if (!this.enabled) return '';
-    if (!this.account) return `<div class="kp-route-sub">${t('出门串门')}</div><div class="kp-route-stats">${t('在「好友」里开始使用后，它可以自己去好友的宫殿玩，带回纪念品。')}</div>`;
+  petSection(): DocumentFragment {
+    if (!this.enabled) return html``;
+    if (!this.account) return html`<div class="kp-route-sub">${t('出门串门')}</div><div class="kp-route-stats">${t('在「好友」里开始使用后，它可以自己去好友的宫殿玩，带回纪念品。')}</div>`;
     const info = this.petInfo, trip = info?.trip;
     const souvenirs = this.petTrips.filter(x => x.status === 'back' && x.souvenir).slice(0, 3);
     const mins = trip ? Math.max(1, Math.round((Date.parse(trip.returnsAt) - Date.now()) / 60e3)) : 0;
-    return `<div class="kp-route-sub">${t('出门串门')}</div>
-      ${trip ? `<div class="kp-pet-trip">${t('正在 <b>{host}</b> 的「{palace}」玩，大约 {n} 分钟后回来', { host: escapeHtml(trip.host.name), palace: escapeHtml(trip.palaceName), n: mins })}</div>`
-        : `<div class="kp-route-go"><button class="kp-primary" data-act="socPetSend"${info && !info.tripsLeft ? ' disabled' : ''}>${t('让它去好友家玩')}</button></div>
+    return html`<div class="kp-route-sub">${t('出门串门')}</div>
+      ${trip ? html`<div class="kp-pet-trip">${rich(t('正在 <b>{host}</b> 的「{palace}」玩，大约 {n} 分钟后回来', { host: escapeHtml(trip.host.name), palace: escapeHtml(trip.palaceName), n: mins }))}</div>`
+        : html`<div class="kp-route-go"><button class="kp-primary" data-act="socPetSend" ${info && !info.tripsLeft ? 'disabled' : ''}>${t('让它去好友家玩')}</button></div>
            <div class="kp-route-stats">${info ? t('今天还能出门 {n} 次。', { n: info.tripsLeft }) : ''}${t('它会随机去一位好友发布的宫殿，回来时带一个纪念品。')}</div>`}
-      ${souvenirs.length ? `<div class="kp-route-sub">${t('带回来的纪念品')}</div>${souvenirs.map(x => `<div class="kp-pet-souvenir"><b>${escapeHtml(x.souvenir.title || this.placeName(x.souvenir.place) || t('一段回忆'))}</b><small>${t('来自 {host} 的「{palace}」', { host: escapeHtml(x.host.name), palace: escapeHtml(x.palaceName) })}${x.souvenir.place ? ` · ${escapeHtml(this.placeName(x.souvenir.place))}` : ''}</small>${x.souvenir.story ? `<p>${escapeHtml(x.souvenir.story)}</p>` : ''}</div>`).join('')}` : ''}`;
+      ${souvenirs.length ? html`<div class="kp-route-sub">${t('带回来的纪念品')}</div>${souvenirs.map(x => html`<div class="kp-pet-souvenir"><b>${x.souvenir.title || this.placeName(x.souvenir.place) || t('一段回忆')}</b><small>${t('来自 {host} 的「{palace}」', { host: x.host.name, palace: x.palaceName })}${x.souvenir.place ? ` · ${this.placeName(x.souvenir.place)}` : ''}</small>${x.souvenir.story ? html`<p>${x.souvenir.story}</p>` : ''}</div>`)}` : ''}`;
   }
 
   /** 纪念品里的地点：物件名，或者物件类型（换成目录里的中文名） */
@@ -594,7 +599,7 @@ export class SocialController {
     this.updateButton();
     if (!v.visiting) { bar.classList.add('kp-hidden'); return; }
     bar.classList.remove('kp-hidden');
-    bar.innerHTML = `<span>🏝 ${t('正在参观 <b></b> 的世界')}</span><button class="kp-primary" data-act="visitLeave">${t('返回我的世界')}</button>`;
+    bar.replaceChildren(html`<span>🏝 ${rich(t('正在参观 <b></b> 的世界'))}</span><button class="kp-primary" data-act="visitLeave">${t('返回我的世界')}</button>`);
     bar.querySelector('b').textContent = v.visiting.owner.name;
   }
 
@@ -614,6 +619,7 @@ export class SocialController {
     if (!v.doc || !this.api) return;
     v.closeSidePanels('guest');
     this.guestOpen = true;
+    this.reporting = false;
     this.guestPalace = v.doc.id;
     v.ui.guestPanel.classList.remove('kp-hidden');
     if (v.recall.panelOpen) v.recall.togglePanel(false);
@@ -637,14 +643,17 @@ export class SocialController {
     if (!this.guestOpen) return;
     const v = this.v, el = v.ui.guestPanel;
     const mine = !v.visiting;
-    el.innerHTML = `
+    el.replaceChildren(html`
       <div class="kp-routes-head"><b>📮 ${t('留言板')}</b><button class="kp-close" data-act="guestClose">×</button></div>
-      <div class="kp-route-stats">${mine ? t('好友来参观时在这里给你留言。') : t('给 {name} 留句话吧。', { name: escapeHtml(v.visiting.owner.name) })}</div>
-      <div class="kp-soc-guest">${loading ? `<div class="kp-route-stats">${t('正在读取…')}</div>` : this.guestbook.length ? this.guestbook.map(g => `
-        <div class="kp-soc-gb${g.hidden ? ' kp-off' : ''}"><div><b>${escapeHtml(g.author.name)}</b><small>${escapeHtml(timeAgo(Date.parse(g.createdAt)))}</small>
-          ${g.mine || mine ? `<button class="kp-soc-link" data-act="guestDelete" data-id="${escapeHtml(g.id)}">${t('删除')}</button>` : ''}</div><p></p></div>`).join('') : `<div class="kp-route-stats">${t('还没有留言。')}</div>`}</div>
-      ${v.visiting || mine ? `<textarea class="kp-num-digits" data-field="guestText" rows="2" maxlength="300" placeholder="${t('写点什么…（300 字以内）')}"></textarea>
-      <div class="kp-route-go"><button class="kp-primary" data-act="guestSend">${tc('submit', '留言')}</button>${v.visiting ? `<button class="kp-soc-ghost" data-act="guestReport" title="${t('这座宫殿有不当内容')}">${t('举报')}</button>` : ''}</div>` : ''}`;
+      <div class="kp-route-stats">${mine ? t('好友来参观时在这里给你留言。') : t('给 {name} 留句话吧。', { name: v.visiting.owner.name })}</div>
+      <div class="kp-soc-guest">${loading ? html`<div class="kp-route-stats">${t('正在读取…')}</div>` : this.guestbook.length ? this.guestbook.map(g => html`
+        <div class="kp-soc-gb${g.hidden ? ' kp-off' : ''}"><div><b>${g.author.name}</b><small>${timeAgo(Date.parse(g.createdAt))}</small>
+          ${g.mine || mine ? html`<button class="kp-soc-link" data-act="guestDelete" data-id="${g.id}">${t('删除')}</button>` : ''}</div><p></p></div>`) : html`<div class="kp-route-stats">${t('还没有留言。')}</div>`}</div>
+      ${this.reporting && v.visiting ? html`<div class="kp-route-stats">${t('举报这座宫殿的原因（广告 / 骚扰 / 违法 / 侵犯隐私 / 其他），可以写几句说明：')}</div>
+      <textarea class="kp-num-digits" data-field="reportText" rows="3" maxlength="500"></textarea>
+      <div class="kp-route-go"><button class="kp-danger" data-act="guestReportSend">${t('举报')}</button><button class="kp-soc-ghost" data-act="guestReportCancel">${t('取消')}</button></div>`
+      : v.visiting || mine ? html`<textarea class="kp-num-digits" data-field="guestText" rows="2" maxlength="300" placeholder="${t('写点什么…（300 字以内）')}"></textarea>
+      <div class="kp-route-go"><button class="kp-primary" data-act="guestSend">${tc('submit', '留言')}</button>${v.visiting ? html`<button class="kp-soc-ghost" data-act="guestReport" title="${t('这座宫殿有不当内容')}">${t('举报')}</button>` : ''}</div>` : ''}`);
     el.querySelectorAll<HTMLElement>('.kp-soc-gb p').forEach((p, i) => { p.textContent = this.guestbook[i].text; });
   }
 
@@ -660,11 +669,12 @@ export class SocialController {
 
   private async report() {
     if (!this.api || !this.guestPalace) return;
-    const reason = prompt(t('举报这座宫殿的原因（广告 / 骚扰 / 违法 / 侵犯隐私 / 其他），可以写几句说明：'), '');
-    if (reason === null) return;
+    const reason = this.v.ui.guestPanel.querySelector<HTMLTextAreaElement>('[data-field="reportText"]')?.value.trim() || '';
     try {
       await this.api.report(this.guestPalace, 'other', reason.slice(0, 500));
       this.v.host.notify?.(t('已举报，管理员会尽快处理'));
+      this.reporting = false;
+      this.renderGuestbook();
     } catch (e) { this.fail(e); }
   }
 
