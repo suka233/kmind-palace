@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import type { Kit } from './kit';
-import { UNKNOWN_TYPE, type Catalog } from './catalog';
+import { isWallMounted, UNKNOWN_TYPE, type Catalog } from './catalog';
 import type { PalaceDoc, PalaceItem, PalaceRoom, Rect } from './schema';
 import { Wall } from './walls';
 import { seedFromString } from './random';
@@ -362,6 +362,7 @@ export function computeColliders(b: BuiltPalace, catalog: Catalog): ColliderRect
   }
   for (const obj of b.itemObjects.values()) {
     const item = obj.userData.item as PalaceItem;
+    if (item.type === 'model' && isWallMounted(item, catalog)) continue;
     const entry = catalog[item.type] || catalog[UNKNOWN_TYPE];
     if (!(item.solid ?? entry?.solid ?? true)) continue;
     if (entry?.childColliders) { traverseOwn(obj, o => { if (o.userData.collider) push(o); }); continue; }

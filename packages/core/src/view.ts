@@ -12,6 +12,7 @@ import { buildPalace, buildStructure, itemDisplayName, spawnItem, despawnItem, p
 import { Editor } from './editor';
 import { RecallController } from './recall';
 import { NumberController } from './numbers';
+import { WalkPreview } from './walk-preview';
 import { ShelfEditor } from './shelf-editor';
 import { SocialController } from './social/controller';
 import { Companion } from './companion';
@@ -185,6 +186,7 @@ export class PalaceView {
   /** @internal */ editor: Editor;
   /** @internal */ recall: RecallController;
   /** @internal */ numbers: NumberController;
+  private walkPreview: WalkPreview;
   /** @internal */ shelfEd: ShelfEditor;
   /** 串门（宿主提供了 social 时才有） @internal */ social: SocialController | null = null;
   /** @internal */ stories: StoryController;
@@ -345,6 +347,7 @@ export class PalaceView {
     this.editor = new Editor(this);
     this.recall = new RecallController(this);
     this.numbers = new NumberController(this);
+    this.walkPreview = new WalkPreview(this);
     this.shelfEd = new ShelfEditor(this);
     this.stories = new StoryController(this);
     this.townCtl = new TownController(this);
@@ -618,6 +621,7 @@ export class PalaceView {
     if (this.webMat) { this.webMat.map?.dispose(); this.webMat.dispose(); }
     this.recall.dispose();
     this.numbers.dispose();
+    this.walkPreview.dispose();
     this.social?.dispose();
     this.unwatchDocs?.();
     if (this.docsTimer) window.clearTimeout(this.docsTimer);
@@ -1345,10 +1349,11 @@ export class PalaceView {
         <button class="kp-primary" data-act="editDone" title="${t('退出搭建（Esc）')}">${rich(ICONS.check)}<span>${t('完成')}</span></button>
       </nav>
       <div class="kp-place kp-glass kp-placing-only kp-palace-only"><span data-ref="placeHint"></span><button data-act="cancelPlace">${t('取消')}</button></div>
-      <div class="kp-edit-hint kp-glass kp-edit-only kp-palace-only" data-ref="editHint">${rich(t('拖动物件移动（小物件可以放到家具上，随家具一起移动）· 拖动橙色圆点旋转 · <b>R</b> 旋转 90° · <b>[ ]</b> 微调角度 · 方向键微移 · <b>Delete</b> 删除 · <b>⌘D</b> 复制 · <b>⌘Z</b> 撤销 · 按住 <b>Alt</b> 关闭吸附'))}</div>
+      <div class="kp-edit-hint kp-glass kp-edit-only kp-palace-only" data-ref="editHint">${rich(t('拖动物件移动（小物件可以放到家具上，随家具一起移动）· 拖动橙色圆点旋转 · <b>R</b> 旋转 90° · <b>[ ]</b> 微调角度 · 方向键微移 · <b>PgUp</b> / <b>PgDn</b> 升降 · <b>Delete</b> 删除 · <b>⌘D</b> 复制 · <b>⌘Z</b> 撤销 · 按住 <b>Alt</b> 关闭吸附'))}</div>
       <div class="kp-drawer kp-glass kp-hidden kp-palace-only" data-ref="drawer"></div>
       <div class="kp-card kp-glass kp-hidden kp-iso-only kp-palace-only" data-ref="card"></div>
       <div class="kp-crosshair kp-walk-only"></div>
+      <div class="kp-walk-note kp-glass" data-ref="walkNote"></div>
       <div class="kp-focus kp-glass kp-hidden" data-ref="focus"></div>
       <div class="kp-walk-hud kp-glass kp-walk-only">
         <span>${rich(t('<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移动 · 拖动转视角 · <kbd>F</kbd> 打开笔记 · <kbd>Esc</kbd> 退出'))}</span>
@@ -2199,6 +2204,7 @@ export class PalaceView {
     this.swapComposer(this.isoCam);
     this.root.classList.remove('kp-walking');
     this.ui.focus.classList.add('kp-hidden');
+    this.walkPreview.reset();
     this.walk.focus = null;
     this.walk.keys.clear();
     this.setCursor('');
@@ -2269,6 +2275,9 @@ export class PalaceView {
             : name);
           focus.classList.remove('kp-hidden');
         } else focus.classList.add('kp-hidden');
+        // 本机笔记的记忆桩：停留一会儿后在一侧弹出笔记预览（宿主不能渲染笔记时不弹）
+        const note = this.host.renderBlock && this.bindingAt(obj, slot);
+        this.walkPreview.target(note && this.isLocalNote(note) ? { id: note.blockId, title: note.title || note.blockId } : null);
       }
     }
   }

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Kit } from './kit';
+import type { PalaceItem } from './schema';
 import { rand, rr, pick, seedFromString } from './random';
 import { sanitizeParts, partName, type PartSpec } from './blocks';
 import { t } from './i18n';
@@ -53,6 +54,10 @@ export interface CatalogEntry {
   slotName?(slot: string, params: Record<string, any>): string;
   /** 扁平物件（地毯、汀步石）：小物件叠放时只借它的高度，不挂在它下面 */
   flat?: boolean;
+}
+
+export function isWallMounted(item: Pick<PalaceItem, 'type' | 'params'>, catalog: Record<string, CatalogEntry>): boolean {
+  return catalog[item.type]?.mount === 'wall' || (item.type === 'model' && item.params?.mount === 'wall');
 }
 
 // ---------------- 参数选项 ----------------
@@ -960,10 +965,11 @@ export function createCatalog(K: Kit, wallH = 2.8) {
   }
 
   const modelWait = K.std('#d9cfc2', .9, 0, { transparent: true, opacity: .5 });
-  /** 导入的 glb：先放一个半透明的占位盒子，加载完换成模型（按高度缩放、落地居中） */
-  function model({ src = null, h = 1 }: any = {}) {
+  /** 导入的 glb：占位盒子和模型使用同一个摆放原点 */
+  function model({ src = null, h = 1, mount = 'floor' }: any = {}) {
     const g = new THREE.Group();
-    const ph = box(g, h * .6, h, h * .6, modelWait, 0, 0, 0, .02);
+    const wall = mount === 'wall';
+    const ph = box(g, h * .6, h, h * .6, modelWait, 0, wall ? -h / 2 : 0, wall ? h * .3 : 0, .02);
     ph.userData.keep = true; // 加载完要换掉，不参与合批
     if (src && K.loadModel) {
       K.loadModel(src).then((scene) => {
@@ -972,7 +978,8 @@ export function createCatalog(K: Kit, wallH = 2.8) {
         const size = bb.getSize(new THREE.Vector3());
         const k = h / Math.max(size.y, 1e-4);
         inst.scale.multiplyScalar(k);
-        inst.position.set(-(bb.min.x + bb.max.x) / 2 * k, -bb.min.y * k, -(bb.min.z + bb.max.z) / 2 * k);
+        const c = bb.getCenter(new THREE.Vector3());
+        inst.position.set(-c.x * k, -(wall ? c.y : bb.min.y) * k, -(wall ? bb.min.z : c.z) * k);
         g.remove(ph);
         g.add(inst);
         K.runtime.onLoaded?.();
@@ -1420,7 +1427,7 @@ export function createCatalog(K: Kit, wallH = 2.8) {
     placeSetting: E('餐具', '摆件', placeSetting, { solid: false }),
     fruitBowl: E('果盘', '摆件', fruitBowl, { solid: false }),
     blocks: E('积木', '积木', blocks, { slotName: (slot, p) => t(partName(p.parts, slot) || slot), params: [{ key: 'parts', label: '部件', kind: 'blocks' }, num('scale', '缩放', .2, 3, .05, 1)] }),
-    model: E('3D 模型', '积木', model, { params: [{ key: 'src', label: '模型', kind: 'model' }, num('h', '高度', .05, 4, .01, 1)] }),
+    model: E('3D 模型', '积木', model, { params: [{ key: 'src', label: '模型', kind: 'model' }, num('h', '大小（高度）', .05, 4, .01, 1), sel('mount', '摆放方式', [['floor', '落地'], ['wall', '挂墙']], 'floor')] }),
     photoFrame: E('相框', '摆件', photoFrame, { solid: false, params: [{ key: 'photo', label: '照片', kind: 'photo' }, num('w', '宽', .1, .4, .01, .18), num('h', '高', .1, .5, .01, .24), sel('frame', '边框', [['black', '黑'], ['oak', '橡木'], ['walnut', '胡桃木'], ['brass', '黄铜']], 'black')] }),
     mediaConsole: E('电视柜', '柜架', mediaConsole, { params: [{ key: 'photo', label: '电视画面', kind: 'photo' }, num('w', '宽度', 1.2, 3.0, .1, 2.0)] }),
     sideboard: E('边柜', '柜架', sideboard, { params: [num('w', '宽度', 1.2, 2.6, .1, 1.8), selc('color', '柜体', WOODS, 'walnut')] }),

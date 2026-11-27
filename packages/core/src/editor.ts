@@ -6,8 +6,9 @@ import { materializeDecor } from './decor';
 import { pickImageFile, pickFile, compressImage, blobToDataUrl, storeMedia } from './media';
 import { recognizeMessages, parseRecognition } from './recognize';
 import { sanitizeParts, countParts } from './blocks';
-import { CATEGORIES, PRESETS, isHexColor, type ParamSpec, type Preset } from './catalog';
+import { CATEGORIES, PRESETS, isHexColor, isWallMounted, type ParamSpec, type Preset } from './catalog';
 import { spawnItem, despawnItem, placeItem, roomAt, itemDisplayName, ownBox } from './build';
+import type { Wall } from './walls';
 import { ThumbnailRenderer } from './thumbs';
 import { StructEditor } from './struct-editor';
 import { t } from './i18n';
@@ -16,7 +17,7 @@ import { html, rich } from './dom';
 export type EditMode = 'items' | 'rooms' | 'walls';
 
 const HINTS: Record<EditMode, string> = {
-  items: '拖动物件移动（小物件可以放到家具上，随家具一起移动）· 拖动橙色圆点旋转 · <b>R</b> 旋转 90° · <b>[ ]</b> 微调角度 · 方向键微移 · <b>Delete</b> 删除 · <b>⌘D</b> 复制 · <b>⌘Z</b> 撤销 · 按住 <b>Alt</b> 关闭吸附',
+  items: '拖动物件移动（小物件可以放到家具上，随家具一起移动）· 拖动橙色圆点旋转 · <b>R</b> 旋转 90° · <b>[ ]</b> 微调角度 · 方向键微移 · <b>PgUp</b> / <b>PgDn</b> 升降 · <b>Delete</b> 删除 · <b>⌘D</b> 复制 · <b>⌘Z</b> 撤销 · 按住 <b>Alt</b> 关闭吸附',
   rooms: '单击地面选中房间 · 拖动橙色把手调整大小 · 「新建房间」后在地面上拖出矩形 · <b>Delete</b> 删除 · <b>⌘Z</b> 撤销 · 按住 <b>Alt</b> 关闭吸附',
   walls: '单击墙体选中（选中的墙会完整显示）· 拖动平移 · 拖动两端圆点改长度 · 单击门窗后可沿墙拖动 · 「画墙」连续画墙 · <b>Delete</b> 删除 · <b>⌘Z</b> 撤销',
 };
@@ -33,6 +34,11 @@ const DEG = Math.PI / 180;
 const GRID = .05;
 const ANGLE = 15;
 const MAX_UNDO = 120;
+const WALL_GAP = .005;
+
+export function clampLift(v: number, wallH: number): number {
+  return THREE.MathUtils.clamp(v, 0, wallH - .05);
+}
 
 type DragKind = 'move' | 'rotate';
 
@@ -46,10 +52,11 @@ interface Drag {
   moved: boolean;
   before: string;
   offset: THREE.Vector3;
+  lift: number;
   wall: boolean;
   stack: boolean;
   fixedY: number | null;
-  /** 叠放拖动：指针与物件底部中心在屏幕上的偏移（像素） */
+  /** 叠放拖动：指针与支撑点在屏幕上的偏移（像素） */
   screenOff?: THREE.Vector2;
 }
 
@@ -72,6 +79,8 @@ export class Editor {
   private drag: Drag | null = null;
   private placing: Placing | null = null;
   private pendingParam: string | null = null;
+  /** 正在拖动「离地高度」滑块：起点高度和支撑面基准 */
+  private liftDrag: { item: PalaceItem; from: number; base: number } | null = null;
   private liveRaf = 0;
   private ring = new THREE.Group();
   private knob: THREE.Mesh;
@@ -239,13 +248,9 @@ export class Editor {
     return this.v.selected?.userData.item as PalaceItem | undefined;
   }
 
-  private isWallItem(item: PalaceItem) {
-    return this.v.catalog[item.type]?.mount === 'wall';
-  }
-
   rotateSelected(deg: number) {
     const item = this.selectedItem();
-    if (!item || this.isWallItem(item)) return;
+    if (!item || isWallMounted(item, this.v.catalog)) return;
     const before = this.snapshot();
     item.rot = normDeg((item.rot || 0) + deg);
     placeItem(this.v.built, item);
@@ -261,7 +266,7 @@ export class Editor {
     const items = this.v.doc.items;
     const pose = itemPose(items, item);
     const p = new THREE.Vector3(...pose.pos);
-    if (this.isWallItem(item)) {
+    if (isWallMounted(item, this.v.catalog)) {
       const n = this.wallNormal(item);
       const tangent = new THREE.Vector3(n.z, 0, -n.x);
       const axes = [tangent, tangent.clone().negate(), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, -1, 0)];
@@ -276,6 +281,34 @@ export class Editor {
     item.room = roomAt(this.v.doc, p.x, p.z)?.id ?? item.room;
     placeItem(this.v.built, item);
     this.afterTransform();
+    this.commit(before);
+  }
+
+  /** 物件底部高出支撑面的距离；挂墙时取中心高度 */
+  liftOf(item: PalaceItem): number {
+    const lift = item.pos[1] - this.liftBase(item);
+    return Math.round(lift * 100) / 100 || 0;
+  }
+
+  /** 设置选中物件的离地高度，记一步撤销 */
+  setLift(v: number): void {
+    this.changeLift(v, false);
+  }
+
+  private changeLift(v: number, relative: boolean) {
+    const item = this.selectedItem();
+    if (!item || this.v.catalog[item.type]?.fixedY) return;
+    const base = this.liftBase(item);
+    const lift = relative ? item.pos[1] - base + v : v;
+    const y = base + clampLift(lift, this.v.built.wallH);
+    // 支撑面的射线交点可能有微小的浮点误差
+    if (Math.abs(y - item.pos[1]) < 1e-6) {
+      if (!relative) this.v.showCard(this.v.selected);
+      return;
+    }
+    const before = this.snapshot();
+    item.pos[1] = round(y);
+    placeItem(this.v.built, item);
     this.commit(before);
   }
 
@@ -309,7 +342,7 @@ export class Editor {
     });
     const copy = copies[0];
     if (copy.name && !/副本|copy/i.test(copy.name)) copy.name = t('{name} · 副本', { name: t(copy.name) });
-    if (this.isWallItem(item)) {
+    if (isWallMounted(item, this.v.catalog)) {
       const n = this.wallNormal(item);
       copy.pos = [round(item.pos[0] + n.z * .4), item.pos[1], round(item.pos[2] - n.x * .4)];
     } else {
@@ -376,17 +409,41 @@ export class Editor {
     if (lost > 0) this.v.host.notify?.(t('有 {n} 个绑定的部件放不下了（绑定还在），调回尺寸即可恢复', { n: lost }));
   }
 
-  /** 一次改几个参数（照片连同画框比例），记一步撤销 */
+  /** 一次改参数及其关联的位置，记一步撤销 */
   private setParams(patch: Record<string, any>) {
     const item = this.selectedItem();
     if (!item) return;
     const before = this.snapshot();
     const params = { ...(item.params || {}), ...patch };
     for (const [k, v] of Object.entries(patch)) if (v === null || v === undefined) delete params[k];
+    const wall = isWallMounted({ type: item.type, params }, this.v.catalog);
+    if (wall !== isWallMounted(item, this.v.catalog) && !this.moveForMount(item, wall)) {
+      this.v.host.notify?.(t('没有找到完整显示的墙，无法挂墙'));
+      this.renderCard(this.v.selected);
+      return;
+    }
     item.params = params;
     this.v.respawn(item);
     this.commit(before);
     this.renderCard(this.v.selected);
+  }
+
+  private moveForMount(item: PalaceItem, wall: boolean) {
+    const doc = this.v.doc;
+    const { pos, rot } = itemPose(doc.items, item);
+    if (wall) {
+      const hit = this.nearestWallMount(pos[0], pos[2]);
+      if (!hit) return false;
+      setItemPose(doc.items, item, [hit.point.x, hit.point.y, hit.point.z], hit.rot);
+      item.wall = hit.wall.id;
+    } else {
+      const p = new THREE.Vector3(...pos).addScaledVector(this.wallNormal(item), .3);
+      const y = this.support(p.x, p.z, this.v.selected, false).y;
+      setItemPose(doc.items, item, [p.x, y, p.z], rot);
+      delete item.wall;
+    }
+    item.room = roomAt(doc, item.pos[0], item.pos[2])?.id;
+    return true;
   }
 
   /** 书架书目：选一个笔记本或文档（它的子文档摆上书架） */
@@ -416,7 +473,7 @@ export class Editor {
       const text = await ai.chat(recognizeMessages(this.v.catalog, url), { temperature: .2 });
       const r = parseRecognition(text, this.v.catalog);
       this.setBusy('');
-      this.startPlacing({ id: 'photo:' + r.type, type: r.type, name: r.name, category: '', params: r.params, y: this.v.catalog[r.type]?.mount === 'wall' ? 1.5 : undefined });
+      this.startPlacing({ id: 'photo:' + r.type, type: r.type, name: r.name, category: '', params: r.params });
       this.v.host.notify?.(t(r.type === 'blocks' ? '识别为「{name}」（用积木拼的），单击放下' : '识别为「{name}」，单击放下', { name: t(r.name) }) + (r.warnings.length ? t('；') + r.warnings[0] : ''));
     } catch (e) {
       this.setBusy('');
@@ -509,21 +566,41 @@ export class Editor {
    * 竖直向下找支撑面：地面，或（小物件时）家具顶面。
    * 放在家具上时返回这件家具，小物件就挂在它下面、随它移动（地毯这类扁平物件除外）。
    */
-  private support(x: number, z: number, self: THREE.Object3D, stack: boolean): { y: number; parent: PalaceItem | null } {
+  private support(x: number, z: number, self: THREE.Object3D, stack: boolean, current?: { y: number; parent?: string }): { y: number; parent: PalaceItem | null } {
     const b = this.v.built;
-    const r = new THREE.Raycaster(new THREE.Vector3(x, 8, z), new THREE.Vector3(0, -1, 0));
+    const r = new THREE.Raycaster(new THREE.Vector3(x, current ? current.y + .001 : 8, z), new THREE.Vector3(0, -1, 0));
     const targets: THREE.Object3D[] = [...b.grounds];
-    if (stack) for (const o of b.pickables) if (o.visible && !isInside(o, self)) targets.push(o);
+    if (current?.parent) {
+      const parent = b.itemObjects.get(current.parent);
+      if (parent) {
+        parent.updateWorldMatrix(true, true);
+        targets.push(parent);
+      }
+    } else if (stack) {
+      for (const o of b.pickables) if (o.visible && !isInside(o, self)) targets.push(o);
+    }
     for (const h of r.intersectObjects(targets, true)) {
       if (isOverlay(h.object) || !isVisible(h.object) || isInside(h.object, self)) continue;
       if (b.grounds.includes(h.object as THREE.Mesh)) return { y: h.point.y, parent: null };
       const n = h.face?.normal.clone().transformDirection(h.object.matrixWorld);
       if (n && n.y > .7) {
         const host = itemOf(h.object);
-        return { y: h.point.y, parent: host && !this.v.catalog[host.type]?.flat ? host : null };
+        const flat = this.v.catalog[host?.type]?.flat;
+        // 读取现有高度时，只认它下方的原支撑物或不设父级的扁平物件
+        if (current && (current.parent ? host?.id !== current.parent : !flat)) continue;
+        return { y: h.point.y, parent: flat ? null : host };
       }
     }
     return { y: 0, parent: null };
+  }
+
+  /** 支撑面换算成 pos[1] 使用的坐标（父物件存在时是相对坐标） */
+  private liftBase(item: PalaceItem) {
+    if (isWallMounted(item, this.v.catalog)) return 0;
+    const obj = this.v.built.itemObjects.get(item.id);
+    const [x, y, z] = itemPose(this.v.doc.items, item).pos;
+    const sup = this.support(x, z, obj, this.canStack(obj, item), { y, parent: item.parent });
+    return sup.y - (y - item.pos[1]);
   }
 
   /** 屏幕上一点的射线打到的第一个可以放东西的面：地面，或家具顶面（跳过自己和放在自己上面的东西） */
@@ -553,19 +630,50 @@ export class Editor {
     return null;
   }
 
+  /** 在默认高度找最近的实墙面，避开门窗洞口 */
+  private nearestWallMount(x: number, z: number) {
+    const { walls, wallH } = this.v.built;
+    const y = clampLift(1.5, wallH);
+    let best: { wall: Wall; point: THREE.Vector3; sign: number } | null = null;
+    let minDist = Infinity;
+    for (const wall of walls) {
+      if (wall.cur <= wallH - .08) continue;
+      const [along, across] = wall.axis === 'x' ? [x, z] : [z, x];
+      const sign = wall.normal ? wall.inSign : across < wall.c ? -1 : 1;
+      for (const rect of wall.rects) {
+        if (y < rect.y0 || y > Math.min(rect.y1, wall.cur)) continue;
+        const s = THREE.MathUtils.clamp(along, rect.s0, rect.s1);
+        const point = wall.worldPos(s, y, sign * wall.t / 2);
+        const dist = (point.x - x) ** 2 + (point.z - z) ** 2;
+        if (dist >= minDist) continue;
+        best = { wall, point, sign };
+        minDist = dist;
+      }
+    }
+    if (!best) return null;
+    const { wall, point, sign } = best;
+    const n = wall.axis === 'x' ? new THREE.Vector3(0, 0, sign) : new THREE.Vector3(sign, 0, 0);
+    // 用实际墙面（包括墙漆、瓷砖）定位模型背面
+    wall.group.updateWorldMatrix(true, true);
+    const meshes = wall.pieces.filter(p => p.mesh.visible).map(p => p.mesh);
+    const ray = new THREE.Raycaster(point.clone().add(n), n.clone().negate());
+    const face = ray.intersectObjects(meshes, false)[0]?.point ?? point;
+    return { wall, point: face.addScaledVector(n, WALL_GAP), rot: Math.round(wall.rotFor(sign) / DEG) };
+  }
+
   private wallNormal(item: PalaceItem) {
     const r = (item.rot || 0) * DEG;
     return new THREE.Vector3(Math.sin(r), 0, Math.cos(r));
   }
 
   /** 按指针位置计算物件的新位置（落地 / 挂墙） */
-  private follow(e: PointerEvent | MouseEvent, item: PalaceItem, obj: THREE.Object3D, d: { offset: THREE.Vector3; wall: boolean; stack: boolean; fixedY: number | null; screenOff?: THREE.Vector2 }) {
+  private follow(e: PointerEvent | MouseEvent, item: PalaceItem, obj: THREE.Object3D, d: { offset: THREE.Vector3; lift: number; wall: boolean; stack: boolean; fixedY: number | null; screenOff?: THREE.Vector2 }) {
     const snap = this.snap && !e.altKey;
     if (d.wall) {
       const h = this.wallHit(e);
       if (!h) return false;
       const n = h.normal;
-      const p = h.point.clone().addScaledVector(n, .005);
+      const p = h.point.clone().addScaledVector(n, WALL_GAP);
       const H = this.v.built.wallH;
       let y = d.fixedY ?? THREE.MathUtils.clamp(h.point.y + d.offset.y, .05, H - .05);
       if (snap && d.fixedY === null) y = snapTo(y, GRID);
@@ -586,7 +694,7 @@ export class Editor {
       z = THREE.MathUtils.clamp(z, bb.min.z, bb.max.z);
       const sup = this.support(x, z, obj, d.stack);
       const items = this.v.doc.items;
-      setItemPose(items, item, [x, sup.y, z], itemPose(items, item).rot, sup.parent?.id ?? null);
+      setItemPose(items, item, [x, sup.y + d.lift, z], itemPose(items, item).rot, sup.parent?.id ?? null);
       item.wall = undefined;
     }
     placeItem(this.v.built, item);
@@ -608,7 +716,7 @@ export class Editor {
       const hit = this.setRay(e).intersectObject(this.knob, false)[0];
       if (hit) {
         const item = this.selectedItem();
-        this.drag = { kind: 'rotate', obj: this.v.selected, item, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, moved: false, before: this.snapshot(), offset: new THREE.Vector3(), wall: false, stack: false, fixedY: null };
+        this.drag = { kind: 'rotate', obj: this.v.selected, item, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, moved: false, before: this.snapshot(), offset: new THREE.Vector3(), lift: 0, wall: false, stack: false, fixedY: null };
         capture(cvs, e.pointerId);
         return true;
       }
@@ -618,18 +726,18 @@ export class Editor {
     const obj = hit.obj, item = obj.userData.item as PalaceItem;
     if (obj !== this.v.selected) this.v.select(obj);
     const entry = this.v.catalog[item.type];
-    const wall = entry?.mount === 'wall';
+    const wall = isWallMounted(item, this.v.catalog);
     const offset = new THREE.Vector3();
     if (wall) {
       const wh = this.wallHit(e);
       if (wh) offset.y = item.pos[1] - wh.point.y;
     }
-    const size = ownBox(obj).getSize(new THREE.Vector3());
-    const stack = !wall && item.type !== 'rug' && Math.max(size.x, size.z) < .9;
+    const stack = !wall && this.canStack(obj, item);
+    const lift = wall ? 0 : Math.max(0, item.pos[1] - this.liftBase(item));
     let screenOff: THREE.Vector2 | undefined;
     if (stack) {
       const p = itemPose(this.v.doc.items, item).pos;
-      const s = new THREE.Vector3(...p).project(this.v.isoCam);
+      const s = new THREE.Vector3(p[0], p[1] - lift, p[2]).project(this.v.isoCam);
       const r = this.v.renderer.domElement.getBoundingClientRect();
       screenOff = new THREE.Vector2(e.clientX - (r.left + (s.x + 1) / 2 * r.width), e.clientY - (r.top + (1 - s.y) / 2 * r.height));
     } else if (!wall) {
@@ -638,7 +746,7 @@ export class Editor {
     }
     this.drag = {
       kind: 'move', obj, item, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, moved: false,
-      before: this.snapshot(), offset, wall, stack, screenOff,
+      before: this.snapshot(), offset, lift, wall, stack, screenOff,
       fixedY: wall && entry?.fixedY ? item.pos[1] : null,
     };
     capture(cvs, e.pointerId);
@@ -650,8 +758,9 @@ export class Editor {
     if (this.placing) {
       const p = this.placing;
       const entry = this.v.catalog[p.item.type];
-      p.valid = this.follow(e, p.item, p.obj, { offset: new THREE.Vector3(), wall: entry?.mount === 'wall', stack: this.isSmall(p.obj) && p.item.type !== 'rug', fixedY: entry?.mount === 'wall' && entry.fixedY ? p.item.pos[1] : null });
-      p.obj.visible = p.valid || entry?.mount !== 'wall';
+      const wall = isWallMounted(p.item, this.v.catalog);
+      p.valid = this.follow(e, p.item, p.obj, { offset: new THREE.Vector3(), lift: 0, wall, stack: !wall && this.canStack(p.obj, p.item), fixedY: wall && entry?.fixedY ? p.item.pos[1] : null });
+      p.obj.visible = p.valid || !wall;
       this.v.invalidate();
       return true;
     }
@@ -703,7 +812,8 @@ export class Editor {
     return true;
   }
 
-  private isSmall(obj: THREE.Object3D) {
+  private canStack(obj: THREE.Object3D, item: PalaceItem) {
+    if (item.type === 'rug') return false;
     const s = ownBox(obj).getSize(new THREE.Vector3());
     return Math.max(s.x, s.z) < .9;
   }
@@ -718,11 +828,12 @@ export class Editor {
     const target = this.v.orbit.target;
     const off = new THREE.Vector3().subVectors(this.v.isoCam.position, target);
     const facing = Math.round(Math.atan2(off.x, off.z) / DEG / 90) * 90;
+    const wall = isWallMounted(preset, this.v.catalog);
     const item: PalaceItem = {
       id: uid(preset.type + '-'),
       type: preset.type,
       name: preset.name,
-      pos: [round(target.x), preset.y ?? 0, round(target.z)],
+      pos: [round(target.x), preset.y ?? (wall ? 1.5 : 0), round(target.z)],
       rot: normDeg(facing),
       params: preset.params ? JSON.parse(JSON.stringify(preset.params)) : undefined,
     };
@@ -730,7 +841,6 @@ export class Editor {
     const obj = spawnItem(b, item, this.v.catalog);
     if (!obj) return;
     this.v.applyNightToNew();
-    const wall = this.v.catalog[item.type]?.mount === 'wall';
     obj.visible = !wall;
     this.placing = { preset, item, obj, before, valid: !wall, down: null };
     this.setDrawer(false);
@@ -774,7 +884,7 @@ export class Editor {
   updateRing() {
     const obj = this.v.selected;
     const item = obj?.userData.item as PalaceItem | undefined;
-    if (!this.active || this.emode !== 'items' || !obj || !item || this.isWallItem(item) || this.v.mode !== 'iso') { this.ring.visible = false; return; }
+    if (!this.active || this.emode !== 'items' || !obj || !item || isWallMounted(item, this.v.catalog) || this.v.mode !== 'iso') { this.ring.visible = false; return; }
     const size = ownBox(obj).getSize(new THREE.Vector3());
     const R = Math.max(size.x, size.z) / 2 + .28;
     this.ringMesh.scale.setScalar(R);
@@ -810,7 +920,7 @@ export class Editor {
     }
     if (this.placing && k === 'r') {
       const p = this.placing;
-      if (this.isWallItem(p.item)) return true;
+      if (isWallMounted(p.item, this.v.catalog)) return true;
       p.item.rot = normDeg((p.item.rot || 0) + (e.shiftKey ? -90 : 90));
       placeItem(this.v.built, p.item);
       this.v.invalidate();
@@ -821,6 +931,11 @@ export class Editor {
     if (k === 'r') { this.rotateSelected(e.shiftKey ? -90 : 90); return true; }
     if (k === '[') { this.rotateSelected(-ANGLE); return true; }
     if (k === ']') { this.rotateSelected(ANGLE); return true; }
+    if (k === 'pageup' || k === 'pagedown') {
+      const step = e.shiftKey ? .25 : GRID;
+      this.changeLift(k === 'pageup' ? step : -step, true);
+      return true;
+    }
     const arrows: Record<string, [number, number]> = { arrowleft: [-1, 0], arrowright: [1, 0], arrowup: [0, 1], arrowdown: [0, -1] };
     if (arrows[k]) { this.nudge(arrows[k][0], arrows[k][1], e.shiftKey); return true; }
     return false;
@@ -873,6 +988,7 @@ export class Editor {
     // 自定义颜色的取色器：拖动时实时预览，松开时记一步
     const colorKey = el.dataset.paramColor;
     if (colorKey) { this.setParam(colorKey, el.value, !commit); return; }
+    if (el.dataset.lift !== undefined) { this.onLiftInput(el as HTMLInputElement, commit); return; }
     const key = el.dataset.param;
     if (!key) return;
     const item = this.selectedItem();
@@ -891,7 +1007,31 @@ export class Editor {
       if (out) out.textContent = fmt(value, spec);
     }
     if (spec.options && !commit) return;
-    this.setParam(key, value, !commit);
+    if (key === 'mount') {
+      this.setParams({ mount: value });
+      this.v.root.focus({ preventScroll: true });
+    } else this.setParam(key, value, !commit);
+  }
+
+  /** 「离地高度」滑块：拖动时只改位置做预览，松手时退回起点再调 setLift，整个拖动只记一步撤销 */
+  private onLiftInput(el: HTMLInputElement, commit: boolean) {
+    const item = this.selectedItem();
+    if (!item || this.v.catalog[item.type]?.fixedY) return;
+    const v = Number(el.value);
+    const out = el.parentElement?.querySelector('output');
+    if (out) out.textContent = fmtLift(v);
+    if (this.liftDrag?.item !== item) this.liftDrag = { item, from: item.pos[1], base: this.liftBase(item) };
+    const d = this.liftDrag;
+    if (!commit) {
+      item.pos[1] = d.base + clampLift(v, this.v.built.wallH);
+      placeItem(this.v.built, item);
+      this.afterTransform();
+      return;
+    }
+    this.liftDrag = null;
+    item.pos[1] = d.from;
+    this.setLift(v);
+    this.v.root.focus({ preventScroll: true });   // 卡片重绘后滑块没了，把键盘交回去，PgUp / PgDn 才继续生效
   }
 
   renderCard(obj: THREE.Object3D | null) {
@@ -901,7 +1041,7 @@ export class Editor {
     const item = obj.userData.item as PalaceItem;
     const entry = this.v.catalog[item.type];
     const room = t(this.v.built?.roomOf(item.room)?.name || '');
-    const wall = entry?.mount === 'wall';
+    const wall = isWallMounted(item, this.v.catalog);
     const host = this.v.host;
     if (this.editingBlocks && item.type === 'blocks') {
       card.replaceChildren(html`
@@ -933,6 +1073,7 @@ export class Editor {
         <button class="kp-danger" data-act="delItem" title="${t('删除（Delete）')}">${t('删除')}</button>
       </div>
       ${params.length ? html`<div class="kp-params">${params}</div>` : ''}
+      ${entry?.fixedY ? '' : html`<div class="kp-lift-row">${liftField(this.liftOf(item), wall, this.v.built.wallH)}</div>`}
       <div class="kp-bindline">
         <span>${b?.blockId ? html`📌 <b></b>` : html`<i>${t('未绑定笔记')}</i>`}${parts ? ` · ${t('另有 {n} 个部件记忆桩', { n: parts })}` : ''}</span>
         ${this.v.host.pickBlock ? html`<button data-act="bind">${b?.blockId ? t('更换') : t('绑定')}</button>` : ''}
@@ -1004,6 +1145,14 @@ function paramField(spec: ParamSpec, value: any) {
   const v = Number(value ?? spec.def ?? 0);
   return html`<label class="kp-field"><span>${t(spec.label)}</span><input type="range" data-param="${spec.key}" min="${spec.min}" max="${spec.max}" step="${spec.step}" value="${v}"><output>${fmt(v, spec)}</output></label>`;
 }
+
+/** 离地高度：落地物件是底部离支撑面的高度，挂墙物件是中心离地的高度 */
+function liftField(lift: number, wall: boolean, wallH: number) {
+  const tip = wall ? t('挂墙物件中心离地的高度 · PgUp / PgDn 升降') : t('物件底部离地的高度（叠放时离下面家具的顶面）· PgUp / PgDn 升降');
+  return html`<label class="kp-field" title="${tip}"><span>${t('离地高度')}</span><input type="range" data-lift min="0" max="${Math.round((wallH - .05) * 100) / 100}" step="0.05" value="${lift}"><output>${fmtLift(lift)}</output></label>`;
+}
+
+const fmtLift = (v: number) => `${v.toFixed(2)} m`;
 
 function fmt(v: number, spec: ParamSpec) {
   return spec.step >= 1 ? String(Math.round(v)) : `${v.toFixed(spec.step < .05 ? 2 : 1)} m`;
